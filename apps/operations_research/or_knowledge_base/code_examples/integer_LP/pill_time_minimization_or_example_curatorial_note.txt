@@ -1,0 +1,26 @@
+# Integer Programming Example: Pill Time Minimization
+
+## Category: Diet-type Resource Allocation, Integer Programming Examples
+
+**File Location:** code_examples/integer_LP/pill_time_minimization_or_example.md
+
+---
+
+## Summary
+
+- This file contains a clearly documented example of an integer programming (IP) minimization problem focusing on pill allocation (minimizing total time, resource use, or cost), commonly known as a "diet-type" or resource/diet minimization problem.
+- The content includes:
+    - Problem background and five-element (standard OR) modeling structure
+    - Full Pyomo code for direct application and learning
+    - Computed optimal solution for illustration
+- It is suitable for reference in future queries or projects involving:
+    - Diet/resource/time minimization
+    - Integer programming modeling
+    - Pyomo code examples for optimization
+    - Educational examples of diet-type allocation and blending problems
+
+## Notes for Knowledge Base Organization
+
+- Placed in `code_examples/integer_LP/` for parallel organization with similar resource allocation/"diet" examples (see also: `resource_allocation_pill_formulation_example.md`).
+- Cross-reference tags include: "diet-type modeling", "resource blending", "time minimization", "Pyomo", and "integer programming".
+- Check for related conceptual summaries or directories under `case_studies/lp/blending/` and update doc links as other content evolves.

@@ -1,0 +1,32 @@
+# Integer Programming Example: Terracotta Jar Production with Infeasible Constraints
+
+## Problem Statement
+An artisan makes two types of jars: thin and stubby. Each thin jar requires 50 minutes shaping and 90 minutes baking. Each stubby jar requires 30 minutes shaping and 150 minutes baking. 
+
+**Weekly time limits:**
+- Shaping time available: 3000 minutes
+- Baking time available: 4000 minutes
+
+**Profits:**
+- Thin jar: $5
+- Stubby jar: $9
+
+### Decision Variables
+- x: Number of thin jars to produce (integer >= 0)
+- y: Number of stubby jars to produce (integer >= 0)
+
+### Integer Program Formulation
+- Objective: Maximize 5 x + 9 y (total profit)
+- Constraints:
+    - 50x + 30y <= 3000 (shaping time constraint)
+    - 90x + 150y <= 4000 (baking time constraint)
+    - x, y are integers >= 0
+
+## Solution Outcome
+Solved with Pyomo and GLPK. The only feasible integer solution is x = 0, y = 0 (i.e., produce nothing), resulting in an objective value of 0. This is because the time constraints are too tight to allow any positive integer solution.
+
+## Insight
+Some integer programs with realistic coefficients may yield only trivial solutions due to tight or binding constraints. It is important to check feasibility when formulating such models and to re-examine constraints if no nontrivial solution is possible.
+
+## Filed under
+Examples/Linear_and_Integer_Programming/Production_Resource_Constraints/

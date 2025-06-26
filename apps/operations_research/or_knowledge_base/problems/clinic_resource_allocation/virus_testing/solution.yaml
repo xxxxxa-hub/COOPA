@@ -1,0 +1,6 @@
+---
+total_tests: 790
+spit_tests: 770
+swab_tests: 20
+objective_status: optimal
+solver_used: CBC/GLPK

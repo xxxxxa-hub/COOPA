@@ -1,0 +1,36 @@
+# Linear Programming Example – Scheduling Patients Across Medical Devices
+
+## Problem Statement
+
+We want to maximize the number of patients scheduled for care using available automatic and manual medical devices, subject to time, device, and policy constraints.
+
+### Variables:
+- x: Number of patients scheduled on the automatic device
+- y: Number of patients scheduled on the manual device
+
+### Objective:
+- Maximize x + y (the total number of patients scheduled)
+
+### Constraints:
+- 10x + 15y <= total_time      # Total available time (minutes) for all devices
+- y >= 2x                    # Manual-to-automatic scheduling ratio
+- x >= 20                    # Minimum scheduled on automatic device
+- x, y >= 0; integer         # Only non-negative integer solutions allowed
+
+### Specific Case Data
+- total_time = 20000 minutes
+
+## Implementation
+- The full implementation (model formulation, solving, extracting the optimal values) is provided in Pyomo using the open-source GLPK solver. See 'bp_patient_optimization.py' in this knowledge base for code details.
+
+## Solution
+- Optimal solution for total_time = 20000: x = 500 (automatic), y = 1000 (manual), total = 1500 patients scheduled.
+
+## Use Cases
+This approach applies to any scenario requiring assignment of resources to parallel units, with bounds, proportional (ratio) relationships, and a shared time or resource budget. Typical settings: healthcare, manufacturing, workforce allocation, equipment scheduling.
+
+## Keywords
+Integer Programming, Scheduling, Healthcare, Resource Allocation, Device Assignment, Pyomo, GLPK, Capacity Planning
+
+## File Reference
+- code_examples/healthcare_scheduling/bp_patient_optimization.py (Pyomo implementation)

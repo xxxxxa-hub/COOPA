@@ -1,0 +1,117 @@
+
+# ===== Pyomo Model for Integer Pollution Minimization =====
+# ASCII-only. Five-element problem summary:
+#
+# 1. Objective:
+#    Minimize total pollution: 7*x + 10*y
+# 2. Variables:
+#    x: integer, >= 0
+#    y: integer, >= 0
+# 3. Constraints:
+#    6*x + 10*y >= 150
+#    y <= 10
+#    x >= y + 1
+#    x >= 0, y >= 0, integer
+# 4. Sets/Parameters:
+#    Coefficients (a1=7, a2=10, c1=6, c2=10, rhs1=150, u_y=10)
+# 5. Additional Notes:
+#    All parameter values and bounds are defined as Params inside the model.
+#    Variables are restricted to integer nonnegative values with bounds using Params.
+#    Model is solved using an open-source or available MILP solver via Pyomo.
+#
+# ===== End summary =====
+
+def solve_pollution_integer_model():
+    from pyomo.environ import (
+        ConcreteModel, Var, Constraint, Objective, Param, NonNegativeIntegers, SolverFactory, value
+    )
+
+    # Model creation
+    model = ConcreteModel()
+
+    # ===== Parameters =====
+    model.a1 = Param(initialize=7)      # Objective coefficient for x
+    model.a2 = Param(initialize=10)     # Objective coefficient for y
+    model.c1 = Param(initialize=6)      # LHS coefficient for x in cons1
+    model.c2 = Param(initialize=10)     # LHS coefficient for y in cons1
+    model.rhs1 = Param(initialize=150)  # RHS for cons1
+    model.u_y = Param(initialize=10)    # Upper bound for y
+    model.lb_x = Param(initialize=0)    # Lower bound for x
+    model.lb_y = Param(initialize=0)    # Lower bound for y
+
+    # ===== Variables =====
+    def x_bounds(m):
+        # x >= y + 1 is handled as a constraint, but x >= 0
+        return (m.lb_x, None)
+
+    def y_bounds(m):
+        return (m.lb_y, m.u_y)
+
+    model.x = Var(domain=NonNegativeIntegers, bounds=x_bounds)
+    model.y = Var(domain=NonNegativeIntegers, bounds=y_bounds)
+
+    # ===== Constraints =====
+    def pollution_constraint_rule(m):
+        return m.c1 * m.x + m.c2 * m.y >= m.rhs1
+
+    model.pollution_constraint = Constraint(rule=pollution_constraint_rule)
+
+    def y_upper_bound_rule(m):
+        return m.y <= m.u_y
+
+    model.y_upper_bound = Constraint(rule=y_upper_bound_rule)
+
+    def sequential_constraint_rule(m):
+        return m.x >= m.y + 1
+
+    model.sequential_constraint = Constraint(rule=sequential_constraint_rule)
+
+    # ===== Objective =====
+    def obj_rule(m):
+        return m.a1 * m.x + m.a2 * m.y
+
+    model.obj = Objective(rule=obj_rule, sense=1)  # sense=1 means minimize
+
+    # ===== Solver Execution =====
+    # Try CBC, GLPK, or any available MILP solver - fallback order
+    solver = None
+    solver_name_used = None
+    for candidate in ["cbc", "glpk"]:
+        try:
+            solver_try = SolverFactory(candidate)
+            if (solver_try is not None) and solver_try.available():
+                solver = solver_try
+                solver_name_used = candidate
+                break
+        except:
+            pass
+    if solver is None:
+        return {
+            "solver_status": "No suitable solver found.",
+            "termination_condition": "failure",
+            "objective_value": None,
+            "x_value": None,
+            "y_value": None,
+            "file": "pollution_integer_model.py"
+        }
+
+    result = solver.solve(model, tee=False)
+
+    # ===== Result Extraction =====
+    solver_status = str(result.solver.status)
+    termination_condition = str(result.solver.termination_condition)
+    obj_val = value(model.obj) if (hasattr(model, "obj") and model.x.value is not None and model.y.value is not None) else None
+    x_val = value(model.x) if model.x.value is not None else None
+    y_val = value(model.y) if model.y.value is not None else None
+
+    return {
+        "solver_status": solver_status,
+        "termination_condition": termination_condition,
+        "objective_value": obj_val,
+        "x_value": x_val,
+        "y_value": y_val,
+        "solver_used": solver_name_used,
+        "file": "pollution_integer_model.py"
+    }
+
+# END OF FILE

@@ -1,0 +1,10 @@
+# Topic Index: Bank Branch Siting MILP
+
+- Facility location
+- Integer programming examples
+- Branch siting
+- Mixed-Integer Linear Programming (MILP)
+- Facility planning
+- Resource allocation
+
+Tagged for: teaching, template reuse, applied operations research, case studies.

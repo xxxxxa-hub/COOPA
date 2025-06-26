@@ -1,0 +1,9 @@
+/.env
+**/__pycache__/
+**/logs/
+**/results/
+**/temp_files/
+**/downloads/
+**/reports/
+/.gradio/
+/temp*.jsonl
