@@ -58,9 +58,9 @@ def create_combinatorial_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
     - The problem involves assigning discrete resources, scheduling tasks, or routing with complex constraints.
     - Logical conditions and combinatorial structures are prominent.
     """
-    # Load the prompt template
+    # Load the prompt template (using no knowledge base version)
     combinatorial_optimizer_prompt_template = yaml.safe_load(
-                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("combinatorial_optimizer.yaml").read_text(encoding="utf-8")
+                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("combinatorial_optimizer_no_kb.yaml").read_text(encoding="utf-8")
             )
 
     combinatorial_optimizer_agent = CodeAgent(

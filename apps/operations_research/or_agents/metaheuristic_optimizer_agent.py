@@ -26,9 +26,9 @@ def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
         CodeAgent: The configured metaheuristic optimizer agent.
     """
 
-    # Load the prompt template
+    # Load the prompt template (using no knowledge base version)
     metaheuristic_optimizer_prompt_template = yaml.safe_load(
-                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("metaheuristic_optimizer.yaml").read_text(encoding="utf-8")
+                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("metaheuristic_optimizer_no_kb.yaml").read_text(encoding="utf-8")
             )
 
     tools = [
