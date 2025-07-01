@@ -28,6 +28,8 @@ from general_tools.file_editing.file_editing_tools import (
     DeleteFileOrFolder,
     CreateFileWithContent,
 )
+# import model utilities
+from .model_utils import build_model
 
 def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/operations_research/or_knowledge_base", index_dir="apps/operations_research/or_vector_store", working_directory=None):
     # Define the working directory
@@ -132,7 +134,7 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
             ],
         prompt_templates=manager_prompt_template,
         additional_authorized_imports=['numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*'],
-        model=LiteLLMModel(model_id=model_id),
+        model=build_model(model_id),
         name="or_agent",
         description="An agent that can solve operations research problems.",
         verbosity_level=LogLevel.DEBUG,

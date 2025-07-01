@@ -18,6 +18,8 @@ from smolagents import (
     monitoring,
     LiteLLMModel,
 )
+# import model utilities
+from ..model_utils import build_model
 load_dotenv()
 
 def create_web_browsing_agent(model_id="gpt-4.1", downloads_folder="downloads_folder", max_steps=10):
@@ -37,11 +39,8 @@ def create_web_browsing_agent(model_id="gpt-4.1", downloads_folder="downloads_fo
     # Create the downloads folder if it doesn't exist
     os.makedirs(downloads_folder, exist_ok=True)
 
-    # Define the model parameters
-    model_params = {
-        "model_id": model_id,
-    }
-    model = LiteLLMModel(**model_params)
+    # Create the model using the build_model utility
+    model = build_model(model_id)
 
     # Define the browser configuration
     browser_config = {

@@ -12,6 +12,8 @@ import importlib
 from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(override=True)
+# import model utilities
+from ..model_utils import build_model
 
 def create_general_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO):
     """
@@ -31,7 +33,7 @@ def create_general_optimizer_agent(model_id="gpt-4.1", managed_agents=[], workin
         LoadObjectFromPythonFile(working_directory),
     ]
 
-    model = LiteLLMModel(model_id=model_id)
+    model = build_model(model_id)
 
     # Load the prompt template (using no knowledge base version)
     general_optimizer_prompt_template = yaml.safe_load(

@@ -7,3 +7,5 @@
 **/reports/
 /.gradio/
 /temp*.jsonl
+/apps/operations_research/or_knowledge_base*/
+/apps/operations_research/or_vector_store*/

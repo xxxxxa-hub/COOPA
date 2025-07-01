@@ -16,6 +16,8 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from .web_browsing_agent import create_web_browsing_agent
+# import model utilities
+from ..model_utils import build_model
 
 def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO):
     """
@@ -27,11 +29,8 @@ def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], w
         CodeAgent: The configured mathematical optimizer agent.
     """
 
-    # Define the model parameters
-    model_params = {
-        "model_id": model_id,
-    }
-    model = LiteLLMModel(**model_params)
+    # Create the model using the build_model utility
+    model = build_model(model_id)
 
     # Define the tools
     tools = [

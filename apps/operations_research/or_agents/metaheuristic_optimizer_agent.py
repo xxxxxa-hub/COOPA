@@ -14,6 +14,8 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from .web_browsing_agent import create_web_browsing_agent
+# import model utilities
+from ..model_utils import build_model
 
 
 def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO):
@@ -39,7 +41,7 @@ def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
         LoadObjectFromPythonFile(working_directory),
     ]
 
-    model = LiteLLMModel(model_id=model_id)
+    model = build_model(model_id)
     description = """
     Metaheuristic Optimizer (pymoo)
     Best for: Complex, black-box, or multi-objective problems where traditional methods are ineffective.

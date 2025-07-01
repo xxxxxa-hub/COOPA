@@ -20,6 +20,8 @@ load_dotenv(override=True)
 
 from dotenv import load_dotenv
 load_dotenv(override=True)
+# import model utilities
+from ..model_utils import build_model
 
 description = """
 **Purpose**:  
@@ -65,7 +67,7 @@ def create_knowledge_retrieval_agent(idx, model_id="gpt-4.1", working_directory=
 
     knowledge_retrieval_agent = ToolCallingAgent(
         tools=kb_retrieval_tools,
-        model=LiteLLMModel(model_id=model_id),
+        model=build_model(model_id),
         prompt_templates=knowledge_retrieval_prompt_template,
         max_steps=max_steps,
         verbosity_level=verbosity_level,

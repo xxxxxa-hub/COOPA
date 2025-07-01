@@ -23,6 +23,8 @@ import os
 
 from dotenv import load_dotenv
 load_dotenv(override=True)
+# import model utilities
+from ..model_utils import build_model
 
 description = """
 **Purpose**:  
@@ -71,7 +73,7 @@ def create_knowledge_curation_agent(
 
     agent = ToolCallingAgent(
         tools=kb_curation_tools,
-        model=LiteLLMModel(model_id=model_id),
+        model=build_model(model_id),
         prompt_templates=knowledge_curation_prompt_template,
         max_steps=max_steps,
         verbosity_level=verbosity_level,
