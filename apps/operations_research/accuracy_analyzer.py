@@ -104,6 +104,77 @@ def analyze_accuracy(file_path, threshold):
     }
 
 
+def rank_incorrect_samples(results, ascending=True):
+    """
+    Rank incorrect samples by error percentage.
+    
+    Args:
+        results (dict): Results dictionary from analyze_accuracy
+        ascending (bool): True for ascending order, False for descending
+        
+    Returns:
+        list: List of incorrect samples ranked by error percentage
+    """
+    # Filter for incorrect predictions only
+    incorrect_samples = [
+        result for result in results['detailed_results'] 
+        if not result['is_correct']
+    ]
+    
+    # Calculate error percentage for each sample if not already present
+    for sample in incorrect_samples:
+        if 'error_percentage' not in sample:
+            if sample['gold_answer'] != 0:
+                sample['error_percentage'] = (sample['absolute_difference'] / abs(sample['gold_answer'])) * 100
+            else:
+                sample['error_percentage'] = float('inf')
+    
+    # Sort by error percentage
+    ranked_incorrect = sorted(incorrect_samples, 
+                            key=lambda x: x['error_percentage'], 
+                            reverse=not ascending)
+    
+    return ranked_incorrect
+
+
+def print_ranked_incorrect_samples(ranked_incorrect, max_samples=20, ascending=True):
+    """Print ranked incorrect samples."""
+    if not ranked_incorrect:
+        print("No incorrect samples found!")
+        return
+    
+    # Determine sort description
+    order_desc = "ascending" if ascending else "descending"
+    display_desc = "best to worst" if ascending else "worst to best"
+    
+    print(f"\nRANKED INCORRECT SAMPLES (by error percentage, {order_desc} - showing {display_desc})")
+    print("=" * 90)
+    print(f"{'Rank':<5} {'Index':<6} {'Gold Answer':<12} {'Predicted':<12} {'Abs Diff':<12} {'Error %':<10}")
+    print("=" * 90)
+    
+    for rank, sample in enumerate(ranked_incorrect[:max_samples], 1):
+        error_percentage = sample.get('error_percentage', 
+                                    (sample['absolute_difference'] / abs(sample['gold_answer']) * 100) 
+                                    if sample['gold_answer'] != 0 else float('inf'))
+        print(f"{rank:<5} "
+              f"{sample['index']:<6} "
+              f"{sample['gold_answer']:<12.4f} "
+              f"{sample['predicted_answer']:<12.4f} "
+              f"{sample['absolute_difference']:<12.6f} "
+              f"{error_percentage:<10.2f}%")
+    
+    if len(ranked_incorrect) > max_samples:
+        print(f"\n... and {len(ranked_incorrect) - max_samples} more incorrect samples")
+    
+    print(f"\nSummary:")
+    print(f"Total incorrect samples: {len(ranked_incorrect)}")
+    best_val = ranked_incorrect[0]['error_percentage']
+    worst_val = ranked_incorrect[-1]['error_percentage']
+    print(f"{'Best' if ascending else 'Worst'} error percentage: {best_val:.2f}%")
+    print(f"{'Worst' if ascending else 'Best'} error percentage: {worst_val:.2f}%")
+    print("=" * 90)
+
+
 def print_summary(results):
     """Print a summary of the accuracy analysis."""
     print("=" * 60)
@@ -152,9 +223,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python accuracy_analyzer.py datasets/nlp4opt/experiment_results_20250630_005435.jsonl 1e-4
-  python accuracy_analyzer.py datasets/nlp4opt/experiment_results_20250630_005435.jsonl 0.01
-  python accuracy_analyzer.py datasets/nlp4opt/experiment_results_20250630_005435.jsonl 1.0
+  python accuracy_analyzer.py --file_path datasets/nlp4opt/experiment_results_20250630_005435.jsonl --threshold 1e-4
+  python accuracy_analyzer.py --file_path datasets/nlp4opt/experiment_results_20250630_005435.jsonl --threshold 0.01 --rank-incorrect
+  python accuracy_analyzer.py --file_path datasets/nlp4opt/experiment_results_20250630_005435.jsonl --threshold 1.0 --rank-incorrect --descending
         """
     )
     
@@ -162,6 +233,9 @@ Examples:
     parser.add_argument('--threshold', type=float, help='Threshold for considering a prediction correct')
     parser.add_argument('--detailed', '-d', action='store_true', help='Show detailed results for individual problems')
     parser.add_argument('--max-examples', type=int, default=10, help='Maximum number of detailed examples to show')
+    parser.add_argument('--rank-incorrect', '-r', action='store_true', help='Show ranked incorrect samples by error percentage')
+    parser.add_argument('--max-incorrect', type=int, default=20, help='Maximum number of incorrect samples to show when ranking')
+    parser.add_argument('--descending', action='store_true', help='Rank in descending order (worst first). Default is ascending (best first)')
     
     args = parser.parse_args()
     
@@ -175,6 +249,12 @@ Examples:
         # Print detailed results if requested
         if args.detailed:
             print_detailed_results(results, args.max_examples)
+        
+        # Print ranked incorrect samples if requested
+        if args.rank_incorrect:
+            ascending = not args.descending  # Convert descending flag to ascending
+            ranked_incorrect = rank_incorrect_samples(results, ascending)
+            print_ranked_incorrect_samples(ranked_incorrect, args.max_incorrect, ascending)
             
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
