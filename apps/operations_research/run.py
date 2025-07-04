@@ -19,7 +19,7 @@ from .or_agents.general_optimizer_agent import create_general_optimizer_agent
 # from .or_agents.knowledge_curation_agent import create_knowledge_curation_agent
 from .or_agents.web_browsing_agent import create_web_browsing_agent
 # import tools available to the manager agent
-from general_tools.talk_to_user.talk_to_user_tool import TalkToUser
+# from general_tools.talk_to_user.talk_to_user_tool import TalkToUser
 # from general_tools.kb_repo_management.repo_indexer import RepoIndexer
 from general_tools.file_editing.file_editing_tools import (
     ListDir,
@@ -116,7 +116,7 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
     # Create the manager agent
     manager_agent = CodeAgent(
         tools=[
-            TalkToUser(),
+            # TalkToUser(),
             ListDir(working_directory),
             SeeFile(working_directory),
             ModifyFile(working_directory),
