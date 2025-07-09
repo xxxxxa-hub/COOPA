@@ -137,6 +137,8 @@ def run_experiment(
             print(f"Problem {idx}: Correct={correct} | Gold={gold_answer} | Predicted={predicted}")
             results.append(result)
             # Optionally, write results incrementally
+            # Create output directory if it doesn't exist
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             with open(output_path, "a", encoding="utf-8") as out_f:
                 out_f.write(json.dumps(result) + "\n")
                 
@@ -160,11 +162,11 @@ if __name__ == "__main__":
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = f"apps/operations_research/or_knowledge_base_{args.dataset}"
+        args.knowledge_base_directory = f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id}"
     if args.output is None:
-        args.output = f"apps/operations_research/datasets/{args.dataset}/experiment_results_{cur_date_time}.jsonl"
+        args.output = f"apps/operations_research/datasets/{args.dataset}_{args.model_id}/experiment_results_{cur_date_time}.jsonl"
 
-    index_dir = f"apps/operations_research/or_vector_store_{args.dataset}"
+    index_dir = f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id}"
 
     run_experiment(
         dataset_path=f"apps/operations_research/datasets/{args.dataset}/{args.dataset}.jsonl",

@@ -79,8 +79,7 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
     # Create the mathematical optimizer agent
     mathematical_optimizer_agent = create_mathematical_optimizer_agent(
         model_id=model_id,
-        # managed_agents=[web_browsing_agent, knowledge_curation_agent],
-        managed_agents=[web_browsing_agent],
+        managed_agents=[web_browsing_agent, knowledge_curation_agent],
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG
     )
@@ -107,7 +106,7 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
     )
     # Load the prompt template
     manager_prompt_template = yaml.safe_load(
-                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("manager.yaml").read_text(encoding="utf-8")
+                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("manager_with_curation.yaml").read_text(encoding="utf-8")
             )
 
     # Create the manager agent
@@ -122,7 +121,7 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
             ],
         managed_agents=[
             web_browsing_agent,
-            knowledge_retrieval_agent,
+            # knowledge_retrieval_agent,
             knowledge_curation_agent,
             general_optimizer_agent,
             mathematical_optimizer_agent,
