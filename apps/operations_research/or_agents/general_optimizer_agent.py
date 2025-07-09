@@ -37,7 +37,7 @@ def create_general_optimizer_agent(model_id="gpt-4.1", managed_agents=[], workin
 
     # Load the prompt template (using no knowledge base version)
     general_optimizer_prompt_template = yaml.safe_load(
-        importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("general_optimizer_no_kb.yaml").read_text(encoding="utf-8")
+        importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("general_optimizer.yaml").read_text(encoding="utf-8")
     )
 
     description = """

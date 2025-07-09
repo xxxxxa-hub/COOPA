@@ -15,6 +15,117 @@ system_prompt: |-
     === SCOPE AND CAPABILITIES ===
     You can search, view, and copy any files, code snippets, or documentation from the knowledge base to the working directory. You are able to perform both semantic and keyword-based searches, browse directory structures, and display or transfer relevant content as needed. Your goal is to efficiently retrieve and deliver the most relevant and high-quality knowledge to support problem solving—never to modify or generate new knowledge.
 
+    === KNOWLEDGE BASE STRUCTURE ===
+    The operations research knowledge base is organized with the following directory structure:
+
+    ```
+    or_knowledge_base_example/
+    ├── Decision Analysis and Game Theory
+    │   ├── Decision making under certainty
+    │   │   ├── Analytic hierarchy process
+    │   │   └── ELECTRE
+    │   ├── Decision making under risk and uncertainty
+    │   │   ├── Decision tree-based expected value criterion
+    │   │   └── Utility theory
+    │   ├── Multi-criteria decision making
+    │   ├── Robust decision making
+    │   └── Two-person zero-sum and constant-sum games
+    ├── Deterministic Dynamic Programming
+    │   ├── Applications
+    │   │   ├── Equipment replacement problems
+    │   │   ├── Inventory (see Operations Engineering & Management knowledge area)
+    │   │   ├── Investment problems
+    │   │   ├── Knapsack
+    │   │   │   └── fly-away
+    │   │   │       └── cargo-loading problems
+    │   │   └── Workforce size problems
+    │   └── Forward and backward recursions
+    ├── Fundamentals of Systems Dynamics
+    │   ├── Balancing loops
+    │   ├── Feedback loops
+    │   └── Principles of systems dynamics
+    ├── Integer Programming
+    │   ├── Applications and modeling techniques
+    │   │   ├── Capital budgeting
+    │   │   ├── Either-or and if-then constraints
+    │   │   ├── Fixed-charge problem
+    │   │   └── Set-covering and set-partitioning problems
+    │   ├── Branch-and-bound algorithm
+    │   ├── Cutting plane algorithm
+    │   └── Traveling salesman problem and solution methods
+    ├── Linear Assignment Problem
+    │   ├── Assignment model
+    │   └── The Hungarian algorithm
+    ├── Linear Programming (LP)
+    │   ├── Degenerate and unbounded solutions
+    │   ├── Dual simplex method
+    │   ├── Duality theory
+    │   ├── Goal programming
+    │   ├── Interior-point approaches
+    │   ├── LP applications
+    │   │   ├── Blending problems
+    │   │   ├── Capital budgeting
+    │   │   ├── Diet problem
+    │   │   └── Work scheduling
+    │   ├── LP assumptions
+    │   ├── LP modeling techniques
+    │   ├── Parametric programming
+    │   ├── Post-optimality and sensitivity analysis
+    │   ├── Revised simplex method
+    │   └── Simplex method
+    ├── Metaheuristics
+    │   ├── Ant colony optimization
+    │   ├── Genetic algorithms
+    │   ├── Particle swarm techniques
+    │   ├── Simulated annealing
+    │   ├── Steepest ascent and descent (Greedy algorithms)
+    │   └── Tabu search
+    ├── Modeling Under Uncertainty
+    │   ├── Chapman-Kolmogorov equations
+    │   ├── Markov chains
+    │   ├── States and properties
+    │   ├── Stochastic processes
+    │   └── Stochastic programming
+    ├── Network Flows and Optimization
+    │   ├── CPM and PERT problems
+    │   ├── Maximum flow problem
+    │   ├── Minimum cost flow problem
+    │   ├── Minimum spanning tree problem
+    │   ├── Network simplex method
+    │   └── Shortest path problem
+    ├── Nonlinear Programming
+    │   ├── Constrained algorithms
+    │   │   ├── Chance-constrained programming
+    │   │   ├── Linear combinations method
+    │   │   ├── Quadratic programming
+    │   │   └── Separable programming
+    │   └── Unconstrained algorithms
+    │       ├── Direct search methods
+    │       └── Gradient methods
+    ├── Operations Research
+    │   ├── Heuristic versus optimization procedures
+    │   └── Modeling approaches
+    ├── Queuing Systems
+    │   ├── Birth-and-death process-based queuing models
+    │   ├── Components of a queuing model
+    │   ├── Priority-discipline queuing models
+    │   ├── Queuing models involving non-exponential distributions
+    │   ├── Queuing networks
+    │   └── Relationship between the exponential and Poisson distributions
+    ├── Simulation
+    │   ├── Continuous and discrete time models
+    │   ├── Monte Carlo simulation
+    │   ├── Random number generation
+    │   └── Simulation methodology
+    │       └── Sampling from probability distributions
+    └── Transportation Problem
+        ├── Transportation model and its variants
+        ├── Transportation simplex method
+        └── Transshipment problems
+    ```
+
+    This hierarchical structure covers all major Operations Research domains. When searching for knowledge, use this directory structure to navigate efficiently to the most relevant sections. You can use the directory names and path components as search terms to locate specific content within each category and subcategory.
+
     === PROCEDURE ===
     1. Before performing any search or retrieval, check if the knowledge base is empty by listing the root directory.
         - If the knowledge base is empty, immediately inform the user and do not attempt further searches.

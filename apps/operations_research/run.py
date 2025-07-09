@@ -15,12 +15,12 @@ from .or_agents.metaheuristic_optimizer_agent import create_metaheuristic_optimi
 from .or_agents.general_optimizer_agent import create_general_optimizer_agent
 
 # import knowledge management agents
-# from .or_agents.knowledge_retrieval_agent import create_knowledge_retrieval_agent
-# from .or_agents.knowledge_curation_agent import create_knowledge_curation_agent
+from .or_agents.knowledge_retrieval_agent import create_knowledge_retrieval_agent
+from .or_agents.knowledge_curation_agent import create_knowledge_curation_agent
 from .or_agents.web_browsing_agent import create_web_browsing_agent
 # import tools available to the manager agent
 # from general_tools.talk_to_user.talk_to_user_tool import TalkToUser
-# from general_tools.kb_repo_management.repo_indexer import RepoIndexer
+from general_tools.kb_repo_management.repo_indexer import RepoIndexer
 from general_tools.file_editing.file_editing_tools import (
     ListDir,
     SeeFile,
@@ -52,30 +52,30 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
     print(f"Knowledge base directory: {knowledge_base_directory}")
 
     # Instantiate indexer (auto sync + live updates) ---------------------------
-    # idx = RepoIndexer(
-    #     knowledge_base_directory,
-    #     watch=False,
-    #     index_dir=Path(index_dir),
-    #     embed_model="text-embedding-3-small",
-    #     openai_api_key=os.getenv("OPENAI_API_KEY"),
-    # )
-    # print("[demo] Initial index built.\n")
+    idx = RepoIndexer(
+        knowledge_base_directory,
+        watch=False,
+        index_dir=Path(index_dir),
+        embed_model="text-embedding-3-small",
+        openai_api_key=os.getenv("OPENAI_API_KEY"),
+    )
+    print("[demo] Initial index built.\n")
 
     # Create the knowledge retrieval agent
-    # knowledge_retrieval_agent = create_knowledge_retrieval_agent(
-    #     idx,
-    #     working_directory=working_directory,
-    #     model_id=model_id,
-    #     verbosity_level=LogLevel.DEBUG,
-    #     max_steps=20
-    # )
+    knowledge_retrieval_agent = create_knowledge_retrieval_agent(
+        idx,
+        working_directory=working_directory,
+        model_id=model_id,
+        verbosity_level=LogLevel.DEBUG,
+        max_steps=20
+    )
     # Create the knowledge curation agent
-    # knowledge_curation_agent = create_knowledge_curation_agent(
-    #     idx,
-    #     working_directory=working_directory,
-    #     model_id=model_id,
-    #     verbosity_level=LogLevel.DEBUG
-    # )
+    knowledge_curation_agent = create_knowledge_curation_agent(
+        idx,
+        working_directory=working_directory,
+        model_id=model_id,
+        verbosity_level=LogLevel.DEBUG
+    )
     # Create the mathematical optimizer agent
     mathematical_optimizer_agent = create_mathematical_optimizer_agent(
         model_id=model_id,
@@ -87,30 +87,27 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
     # Create the combinatorial optimizer agent
     combinatorial_optimizer_agent = create_combinatorial_optimizer_agent(
         model_id=model_id,
-        # managed_agents=[web_browsing_agent, knowledge_curation_agent],
-        managed_agents=[web_browsing_agent],
+        managed_agents=[web_browsing_agent, knowledge_curation_agent],
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG
     )
     # Create the metaheuristic optimizer agent
     metaheuristic_optimizer_agent = create_metaheuristic_optimizer_agent(
         model_id=model_id,
-        # managed_agents=[web_browsing_agent, knowledge_curation_agent],
-        managed_agents=[web_browsing_agent],
+        managed_agents=[web_browsing_agent, knowledge_curation_agent],
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG
     )
     # Create the general optimizer agent
     general_optimizer_agent = create_general_optimizer_agent(
         model_id=model_id,
-        # managed_agents=[web_browsing_agent, knowledge_curation_agent],
-        managed_agents=[web_browsing_agent],
+        managed_agents=[web_browsing_agent, knowledge_curation_agent],
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG
     )
     # Load the prompt template
     manager_prompt_template = yaml.safe_load(
-                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("manager_no_kb.yaml").read_text(encoding="utf-8")
+                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("manager.yaml").read_text(encoding="utf-8")
             )
 
     # Create the manager agent
@@ -125,8 +122,8 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
             ],
         managed_agents=[
             web_browsing_agent,
-            # knowledge_retrieval_agent,
-            # knowledge_curation_agent,
+            knowledge_retrieval_agent,
+            knowledge_curation_agent,
             general_optimizer_agent,
             mathematical_optimizer_agent,
             combinatorial_optimizer_agent,

@@ -38,6 +38,9 @@ import shutil
 from datetime import datetime
 from .run import create_manager_agent
 
+# Import the knowledge base initialization function
+from general_tools.kb_repo_management.kb_initialization import create_or_knowledge_base, create_sample_or_content
+
 def get_current_timestamp():
     now = datetime.now()
     return now.strftime("%Y%m%d_%H%M%S")
@@ -51,6 +54,23 @@ def run_experiment(
     working_directory=None,
     output_path="experiment_results.jsonl"
 ):
+    
+    # Initialize the knowledge base if it doesn't exist
+    if not Path(knowledge_base_directory).exists():
+        print(f"Initializing Operations Research knowledge base at: {knowledge_base_directory}")
+        try:
+            result = create_or_knowledge_base(knowledge_base_directory)
+            print(f"{result}")
+            
+            # Create sample content for better organization
+            sample_result = create_sample_or_content(knowledge_base_directory)
+            print(f"{sample_result}")
+            
+        except Exception as e:
+            print(f"Error initializing knowledge base: {e}")
+            print("Continuing without knowledge base initialization...")
+    else:
+        print(f"Using existing knowledge base at: {knowledge_base_directory}")
     
     # CustomSmolagentsInstrumentor().instrument(tracer_provider=trace_provider)
     if "nlp4lp" in dataset_path:
@@ -77,7 +97,7 @@ def run_experiment(
             question = item["question"]
             gold_answer = item["answer"]
             idx = item.get("index", None)
-            # if int(idx) < 52:
+            # if int(idx) != 215:
             #     continue
 
             # session_id = f"{cur_date_time}_{dataset_name}_{idx}"
@@ -121,11 +141,11 @@ def run_experiment(
                 out_f.write(json.dumps(result) + "\n")
                 
                 # ask the manager agent to save any useful knowledge to the knowledge base with error handling
-                # try:
-                #     manager_agent.run("Please save any useful knowledge from this problem to the knowledge base. This is at your discretion and the purpose of the knowledge base is to help you solve future problems. Report the update you have made to the knowledge base as final answer", reset=False)
-                # except Exception as e:
-                #     print(f"Error saving knowledge to the knowledge base: {e}")
-                #     continue
+                try:
+                    manager_agent.run("Please save any useful knowledge from this problem to the knowledge base. This is at your discretion and the purpose of the knowledge base is to help you solve future problems. Report the update you have made to the knowledge base as final answer", reset=False)
+                except Exception as e:
+                    print(f"Error saving knowledge to the knowledge base: {e}")
+                    continue
 
     print(f"Experiment finished. Results saved to {output_path}.")
 
