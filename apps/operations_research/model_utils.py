@@ -26,7 +26,7 @@ def build_model(model_name):
         >>> model = build_model("Qwen/Qwen3-32B")  # Returns InferenceClientModel with nebius provider
         >>> model = build_model("google/gemma-3-27b-it")  # Returns InferenceClientModel with nebius provider
     """
-    if any(x in model_name for x in ["gpt", "o3", "claude", "gemini"]):
+    if any(x in model_name for x in ["gpt", "o3", "o4", "claude", "gemini"]):
         return LiteLLMModel(model_id=model_name)
     elif any(x in model_name for x in ["Qwen", "gemma", "Mistral"]):
         return InferenceClientModel(model_id=model_name, provider="nebius")
