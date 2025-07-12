@@ -39,7 +39,7 @@ from datetime import datetime
 from .run import create_manager_agent
 
 # Import the knowledge base initialization function
-from general_tools.kb_repo_management.kb_initialization import create_or_knowledge_base, create_sample_or_content
+from general_tools.kb_repo_management.kb_initialization import create_or_knowledge_base
 
 def get_current_timestamp():
     now = datetime.now()
@@ -62,15 +62,14 @@ def run_experiment(
             result = create_or_knowledge_base(knowledge_base_directory)
             print(f"{result}")
             
-            # Create sample content for better organization
-            sample_result = create_sample_or_content(knowledge_base_directory)
-            print(f"{sample_result}")
-            
         except Exception as e:
             print(f"Error initializing knowledge base: {e}")
             print("Continuing without knowledge base initialization...")
     else:
         print(f"Using existing knowledge base at: {knowledge_base_directory}")
+    
+    Path(index_dir).parent.mkdir(parents=True, exist_ok=True)
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     
     # CustomSmolagentsInstrumentor().instrument(tracer_provider=trace_provider)
     if "nlp4lp" in dataset_path:
@@ -97,8 +96,8 @@ def run_experiment(
             question = item["question"]
             gold_answer = item["answer"]
             idx = item.get("index", None)
-            # if int(idx) != 215:
-            #     continue
+            if int(idx) != 1:
+                continue
 
             # session_id = f"{cur_date_time}_{dataset_name}_{idx}"
 
@@ -138,7 +137,6 @@ def run_experiment(
             results.append(result)
             # Optionally, write results incrementally
             # Create output directory if it doesn't exist
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             with open(output_path, "a", encoding="utf-8") as out_f:
                 out_f.write(json.dumps(result) + "\n")
                 
@@ -162,11 +160,11 @@ if __name__ == "__main__":
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id}"
+        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}").resolve()
     if args.output is None:
-        args.output = f"apps/operations_research/datasets/{args.dataset}_{args.model_id}/experiment_results_{cur_date_time}.jsonl"
+        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}.jsonl").resolve()
 
-    index_dir = f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id}"
+    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}").resolve()
 
     run_experiment(
         dataset_path=f"apps/operations_research/datasets/{args.dataset}/{args.dataset}.jsonl",
