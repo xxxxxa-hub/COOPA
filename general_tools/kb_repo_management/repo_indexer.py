@@ -53,7 +53,13 @@ def _file_sig(p: Path):
 def chunk_python(path: Path) -> List[Dict[str, Any]]:
     source = path.read_text(encoding="utf-8", errors="ignore")
     norm_path = str(path.resolve())
-    tree = ast.parse(source)
+    
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        # If the .py file doesn't contain valid Python syntax, treat it as text
+        return chunk_markdown(path)
+    
     lines = source.splitlines()
     chunks: List[Dict[str, Any]] = []
     for node in ast.walk(tree):
