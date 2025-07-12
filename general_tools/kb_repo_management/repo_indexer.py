@@ -120,7 +120,7 @@ def chunk_markdown(path: Path) -> List[Dict[str, Any]]:
 def chunk_file(path: Path) -> List[Dict[str, Any]]:
     if path.suffix == ".py":
         return chunk_python(path)
-    if path.suffix in {".md", ".txt"}:
+    if path.suffix in {".md", ".txt", ".json"}:
         return chunk_markdown(path)
     return []
 
