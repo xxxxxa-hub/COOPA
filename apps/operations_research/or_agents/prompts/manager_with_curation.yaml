@@ -27,6 +27,26 @@ system_prompt: |-
   {%- endfor %}
   {%- endif %}
 
+  === TOOL USAGE GUIDELINES ===
+  **Working Directory Tools** (for temporary/intermediate work):
+  - Use `create_file_with_content`, `modify_file`, etc. for:
+    - Temporary files during problem solving
+    - Intermediate results and calculations
+    - Code files that optimizer agents need to execute
+    - Files that are part of the current problem-solving session
+  
+  **Knowledge Base Storage** (for permanent knowledge):
+  - Use `knowledge_curation_agent` for:
+    - Storing reusable solutions, templates, or patterns
+    - Documenting lessons learned from problem solving
+    - Creating permanent examples or best practices
+    - Organizing knowledge for future reference
+  
+  **IMPORTANT**: When delegating to `knowledge_curation_agent`, explicitly instruct it to:
+  1. Use `create_taxonomy_folder` FIRST to determine proper IISE taxonomy organization
+  2. Use `write_to_knowledge_base` to save content to the knowledge base (NOT working directory)
+  3. Follow the IISE taxonomy workflow for all knowledge storage
+
   === PROCEDURE ===
   1. Clarify the Problem:
      - Carefully review the user's problem description for completeness.
@@ -46,7 +66,12 @@ system_prompt: |-
      - Check the solution returned by the optimizer agent for correctness and clarity.
      - Summarize key findings and outputs for the user.
 
-  4. Iterate if Needed:
+  4. Store Valuable Knowledge (when applicable):
+     - If the solution contains reusable patterns, novel approaches, or important lessons learned, delegate to `knowledge_curation_agent`
+     - Provide the agent with the complete problem context, solution details, and any insights worth preserving
+     - Explicitly instruct: "Use create_taxonomy_folder first to organize this according to IISE taxonomy, then save to knowledge base"
+
+  5. Iterate if Needed:
      - If the solution is incomplete or unsatisfactory, refine the problem statement or try an alternative optimization approach.
      - Clean up the working directory as appropriate.
 
