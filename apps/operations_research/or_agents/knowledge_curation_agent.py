@@ -16,6 +16,8 @@ from general_tools.kb_repo_management.kb_repo_retrieval_tools import (
     SemanticSearchKnowledgeBase,
     KeywordSearchKnowledgeBase,
 )
+# Import IISE taxonomy manager
+from ..or_tools.iise_taxonomy_manager import IISETaxonomyManager, CreateTaxonomyFolder
 import yaml
 import importlib
 from pathlib import Path
@@ -43,6 +45,7 @@ Do **not** use this agent to search for or retrieve knowledge. For retrieval, us
 - Move, rename, or delete files and folders in the knowledge base.
 - Perform semantic or keyword search within the knowledge base to avoid duplication or for organization.
 - List and view files/folders in the knowledge base.
+- Automatically create appropriate IISE taxonomy-based folder structures for new OR knowledge using the CreateTaxonomyFolder tool.
 """
 
 def create_knowledge_curation_agent(
@@ -52,6 +55,13 @@ def create_knowledge_curation_agent(
     max_steps=10,
     verbosity_level=LogLevel.INFO,
 ):
+    
+    # Initialize IISE taxonomy manager
+    taxonomy_file_path = Path(__file__).parent.parent / "IISE_BoK.json"
+    taxonomy_manager = IISETaxonomyManager(str(taxonomy_file_path))
+    
+    # Build the model for taxonomy classification
+    model = build_model(model_id)
 
     kb_curation_tools = [
         WriteToKnowledgeBase(idx),
@@ -63,6 +73,7 @@ def create_knowledge_curation_agent(
         DeleteFromKnowledgeBase(idx),
         SemanticSearchKnowledgeBase(idx),
         KeywordSearchKnowledgeBase(idx),
+        CreateTaxonomyFolder(taxonomy_manager, idx, model),
     ]
 
     # Load the prompt template
@@ -73,7 +84,7 @@ def create_knowledge_curation_agent(
 
     agent = ToolCallingAgent(
         tools=kb_curation_tools,
-        model=build_model(model_id),
+        model=model,
         prompt_templates=knowledge_curation_prompt_template,
         max_steps=max_steps,
         verbosity_level=verbosity_level,
@@ -119,8 +130,8 @@ if __name__ == "__main__":
     from pathlib import Path
     import shutil
 
-    knowledge_base_dir = Path("demo_knowledge_base")
-    working_dir = Path("demo_working_directory")
+    knowledge_base_dir = Path("demo_knowledge_base").resolve()
+    working_dir = Path("demo_working_directory").resolve()
     # Clean up any previous runs
     if knowledge_base_dir.exists():
         shutil.rmtree(knowledge_base_dir)
@@ -147,8 +158,10 @@ if __name__ == "__main__":
     # Step 1: Create the agent
     agent = create_knowledge_curation_agent(
         idx,
-        model_id="gpt-4.1",
+        # model_id="gpt-4.1",
+        model_id="Qwen/Qwen3-32B",
         working_directory=str(working_dir),
+        verbosity_level=LogLevel.DEBUG,
     )
 
     # Step 2: Add a new algorithm description (text)
