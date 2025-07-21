@@ -101,7 +101,7 @@ class CreateTaxonomyFolder(Tool):
         messages = [{"role": "user", "content": classification_prompt}]
         response = self.model.generate(messages).content
         suggested_path = response.strip()
-        suggested_path = None
+
         if self.taxonomy_manager.validate_category_path(suggested_path):
             return suggested_path
         else:
