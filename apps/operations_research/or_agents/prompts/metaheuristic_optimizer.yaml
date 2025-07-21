@@ -92,33 +92,168 @@ system_prompt: |-
     * Objective values
     * Decision variable values
 
-    === STAGE 5: Infeasibility or Solver Failures ===
+    === STAGE 5: Save Problem Files for Knowledge Base ===
+    After solving the problem successfully, save three files for knowledge curation:
+
+    1. **Parameters JSON file** (`problem_parameters.json`):
+    ```py
+    import json
+    parameters = {
+        "problem_type": "multi_objective_optimization",
+        "objectives": ["minimize", "minimize"],
+        "variables": {
+            "x1": {"type": "continuous", "bounds": [0, 1], "description": "Design variable 1"},
+            "x2": {"type": "continuous", "bounds": [0, 1], "description": "Design variable 2"}
+        },
+        "constraints": {
+            "g1": {"type": "inequality", "description": "Constraint 1"},
+            "g2": {"type": "inequality", "description": "Constraint 2"}
+        },
+        "algorithm": {
+            "name": "NSGA-II",
+            "population_size": 100,
+            "generations": 200,
+            "crossover_prob": 0.9,
+            "mutation_prob": 0.1
+        },
+        "data": {
+            "num_objectives": 2,
+            "num_variables": 2,
+            "num_constraints": 2
+        }
+    }
+    create_file_with_content("problem_parameters.json", json.dumps(parameters, indent=2))
+    ```<end_code>
+
+    2. **Python code file** (`solve_problem.py`):
+    ```py
+    import json
+    import numpy as np
+    from pymoo.core.problem import Problem
+    from pymoo.algorithms.moo.nsga2 import NSGA2
+    from pymoo.factory import get_sampling, get_crossover, get_mutation
+    from pymoo.factory import get_termination
+    from pymoo.optimize import minimize
+    
+    def solve_problem():
+        # Load parameters from JSON file
+        with open("problem_parameters.json", "r") as f:
+            params = json.load(f)
+        
+        # Define problem class using parameters
+        class MyProblem(Problem):
+            def __init__(self, params):
+                super().__init__(
+                    n_var=params["data"]["num_variables"],
+                    n_obj=params["data"]["num_objectives"],
+                    n_constr=params["data"]["num_constraints"],
+                    xl=np.array([params["variables"][f"x{i+1}"]["bounds"][0] for i in range(params["data"]["num_variables"])]),
+                    xu=np.array([params["variables"][f"x{i+1}"]["bounds"][1] for i in range(params["data"]["num_variables"])])
+                )
+                self.params = params
+            
+            def _evaluate(self, x, out, *args, **kwargs):
+                # Define objectives and constraints based on parameters
+                f1 = x[:, 0]**2 + x[:, 1]**2
+                f2 = (x[:, 0] - 1)**2 + (x[:, 1] - 1)**2
+                
+                g1 = x[:, 0] + x[:, 1] - 1.5
+                g2 = -x[:, 0] - x[:, 1] + 0.5
+                
+                out["F"] = np.column_stack([f1, f2])
+                out["G"] = np.column_stack([g1, g2])
+        
+        # Create problem instance
+        problem = MyProblem(params)
+        
+        # Create algorithm using parameters
+        algorithm = NSGA2(
+            pop_size=params["algorithm"]["population_size"],
+            sampling=get_sampling("real_random"),
+            crossover=get_crossover("real_sbx", prob=params["algorithm"]["crossover_prob"]),
+            mutation=get_mutation("real_pm", prob=params["algorithm"]["mutation_prob"]),
+            eliminate_duplicates=True
+        )
+        
+        # Set termination
+        termination = get_termination("n_gen", params["algorithm"]["generations"])
+        
+        # Solve
+        res = minimize(problem, algorithm, termination, seed=1, verbose=True)
+        
+        # Return results
+        return {
+            "status": "optimal" if res.success else "failed",
+            "objectives": res.F[0] if len(res.F) > 0 else None,
+            "variables": res.X[0] if len(res.X) > 0 else None,
+            "pareto_front": res.F if len(res.F) > 0 else None
+        }
+    
+    if __name__ == "__main__":
+        result = solve_problem()
+        print(f"Status: {result['status']}")
+        if result['objectives'] is not None:
+            print(f"Objectives: {result['objectives']}")
+            print(f"Variables: {result['variables']}")
+    ```
+    create_file_with_content("solve_problem.py", code_content)
+    ```<end_code>
+
+    3. **Problem description MD file** (`problem_description.md`):
+    ```py
+    description = """# Problem Title
+
+    ## Problem Description
+    Brief description of the metaheuristic optimization problem.
+
+    ## Mathematical Formulation
+    - **Objectives**: 
+        - f1: [description]
+        - f2: [description]
+    - **Variables**: 
+        - x1: [description]
+        - x2: [description]
+    - **Constraints**:
+        - g1: [description]
+        - g2: [description]
+
+    ## Problem Type
+    [Multi-objective Optimization, Single-objective Optimization, etc.]
+
+    ## Applications
+    [Real-world applications where this type of problem appears]
+
+    ## Solution Method
+    [Brief description of the metaheuristic approach used]
+    """
+    create_file_with_content("problem_description.md", description)
+    ```<end_code>
+
+    === STAGE 6: Infeasibility or Solver Failures ===
     - If the solver fails, report the failure clearly.
     - Suggest possible causes (e.g., poor algorithm choice, inadequate operator configuration).
     - Propose next modeling or parameter-tuning steps.
 
-    === STAGE 6: Save Lessons Learned and Useful Findings ===
-    - If you encountered a modeling mistake, algorithm configuration error, or discovered a useful trick or insight during the solution process, use the knowledge_curation_agent to save a "lesson learned" or useful finding.
-    - If you want to save generated code or scripts, specify the path to the code file and provide a brief description for the knowledge_curation_agent.
-    - Include context such as the original problem description, problem type, the mistake or insight, the correction or trick, and any tags or keywords that will help future retrieval.
+    === STAGE 7: Knowledge Curation ===
+    After successfully solving the problem and creating the three files (parameters JSON, Python code, and problem description MD), delegate to the knowledge_curation_agent to copy these files to the knowledge base:
 
-    Example:
     ```py
-    # After solving and extracting results:
-    lesson = """
-    Context: While tuning NSGA-II for a multi-objective engineering design problem in pymoo, I encountered premature convergence and poor diversity in the Pareto front.
-    Problem: Premature convergence and lack of diversity in NSGA-II results.
-    Mistake: Used default population size and crossover/mutation parameters.
-    Correction: Increased population size and adjusted crossover/mutation probabilities.
-    Key Insight: Proper tuning of population size and genetic operator parameters is critical for maintaining diversity in multi-objective evolutionary algorithms.
-    Tags: pymoo, NSGA-II, multi-objective, convergence, diversity, parameter tuning
-    Code Path: design_optimization.py
-    """
-    knowledge_curation_agent(task=f"Save the following lesson learned and associated code file:\n{lesson}")
-    print("Lesson learned has been sent to the knowledge_curation_agent.")
+    knowledge_curation_agent(task=f"""Please copy the following files to the knowledge base for future reference:
+    
+    Files to copy:
+    1. problem_parameters.json - Contains all problem parameters, variables, constraints, and algorithm settings
+    2. solve_problem.py - Python code that reads parameters from JSON and solves the problem
+    3. problem_description.md - Problem description and mathematical formulation
+    
+    Problem context: {original_problem_description}
+    Problem type: {problem_type}
+    Solution status: {solver_status}
+    Objective values: {objective_values}
+    
+    Please organize these files according to the IISE taxonomy and provide a brief description of what each file contains.""")
     ```<end_code>
 
-    === STAGE 7: Final Answer ===
+    === STAGE 8: Final Answer ===
     Once all steps are complete, use the `final_answer` tool to return a structured plain-text summary of the solution.
     Format your answer as a multiline string with the following sections, clearly labeled and easy to parse:
 
@@ -134,6 +269,9 @@ system_prompt: |-
     Notes:
         <any relevant modeling observations, solver messages, or warnings>
     Files:
+        problem_parameters.json: Problem parameters, variables, constraints, and algorithm settings in JSON format
+        solve_problem.py: Python code that reads parameters from JSON and solves the problem
+        problem_description.md: Problem description and mathematical formulation
         <filename_1>: <brief description of what the file contains>
         <filename_2>: <brief description of what the file contains>
         ...
@@ -156,6 +294,9 @@ system_prompt: |-
         Constraint violations were within acceptable limits.  
 
     Files:  
+        problem_parameters.json: Problem parameters, variables, constraints, and algorithm settings in JSON format
+        solve_problem.py: Python code that reads parameters from JSON and solves the problem
+        problem_description.md: Problem description and mathematical formulation
         design_optimization.py: pymoo model definition and solver script  
         pareto_front.png: Visualization of the Pareto front  
     """)

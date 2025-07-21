@@ -48,6 +48,108 @@ system_prompt: |-
   5. If the problem is ambiguous, ask for clarification.
   6. Provide clear, well-documented code and concise explanations.
 
+  === Save Problem Files for Knowledge Base ===
+  After successfully implementing the solution, save three files for knowledge curation:
+
+  1. **Parameters JSON file** (`problem_parameters.json`):
+  ```py
+  import json
+  parameters = {
+      "problem_type": "simulation",
+      "method": "Monte Carlo",
+      "variables": {
+          "num_trials": {"type": "integer", "value": 10000, "description": "Number of simulation trials"},
+          "lifetime_mean": {"type": "float", "value": 5.0, "description": "Mean lifetime for components"}
+      },
+      "data": {
+          "component_costs": [100, 200, 300],
+          "replacement_thresholds": [0.8, 0.9, 0.95],
+          "discount_rate": 0.05
+      }
+  }
+  create_file_with_content("problem_parameters.json", json.dumps(parameters, indent=2))
+  ```<end_code>
+
+  2. **Python code file** (`solve_problem.py`):
+  ```py
+  import json
+  import numpy as np
+  
+  def solve_problem():
+      # Load parameters from JSON file
+      with open("problem_parameters.json", "r") as f:
+          params = json.load(f)
+      
+      # Implement solution using parameters
+      num_trials = params["variables"]["num_trials"]["value"]
+      lifetime_mean = params["variables"]["lifetime_mean"]["value"]
+      component_costs = params["data"]["component_costs"]
+      replacement_thresholds = params["data"]["replacement_thresholds"]
+      discount_rate = params["data"]["discount_rate"]
+      
+      # Run simulation
+      results = run_simulation(num_trials, lifetime_mean, component_costs, 
+                             replacement_thresholds, discount_rate)
+      
+      return results
+  
+  def run_simulation(num_trials, lifetime_mean, component_costs, 
+                    replacement_thresholds, discount_rate):
+      # Implementation here
+      return {"mean_profit": 1250.4, "num_replacements": [0, 1, 2]}
+  
+  if __name__ == "__main__":
+      result = solve_problem()
+      print(f"Results: {result}")
+  ```
+  create_file_with_content("solve_problem.py", code_content)
+  ```<end_code>
+
+  3. **Problem description MD file** (`problem_description.md`):
+  ```py
+  description = """# Problem Title
+
+  ## Problem Description
+  Brief description of the simulation or general optimization problem.
+
+  ## Method
+  [Description of the approach used - Monte Carlo simulation, custom algorithm, etc.]
+
+  ## Parameters
+  - [Parameter 1]: [description]
+  - [Parameter 2]: [description]
+
+  ## Problem Type
+  [Simulation, Custom Algorithm, etc.]
+
+  ## Applications
+  [Real-world applications where this type of problem appears]
+
+  ## Solution Method
+  [Brief description of the solution approach used]
+  """
+  create_file_with_content("problem_description.md", description)
+  ```<end_code>
+
+  === Knowledge Curation ===
+  After successfully implementing the solution and creating the three files (parameters JSON, Python code, and problem description MD), delegate to the knowledge_curation_agent to copy these files to the knowledge base:
+
+  ```py
+  knowledge_curation_agent(task=f"""Please copy the following files to the knowledge base for future reference:
+  
+  Files to copy:
+  1. problem_parameters.json - Contains all problem parameters, variables, and data
+  2. solve_problem.py - Python code that reads parameters from JSON and solves the problem
+  3. problem_description.md - Problem description and method documentation
+  
+  Problem context: {original_problem_description}
+  Problem type: {problem_type}
+  Solution status: {solution_status}
+  Key results: {key_results}
+  
+  Please organize these files according to the IISE taxonomy and provide a brief description of what each file contains.""")
+  ```<end_code>
+
   === Save Lessons Learned and Useful Findings ===
   - If you encountered a modeling mistake, solver error, or discovered a useful trick or insight during the solution process, use the knowledge_curation_agent to save a "lesson learned" or useful finding.
   - If you want to save generated code or scripts, specify the path to the code file and provide a brief description for the knowledge_curation_agent.
@@ -65,6 +167,9 @@ system_prompt: |-
   Notes:
       <any relevant observations, assumptions, or warnings>
   Files:
+      problem_parameters.json: Problem parameters, variables, and data in JSON format
+      solve_problem.py: Python code that reads parameters from JSON and solves the problem
+      problem_description.md: Problem description and method documentation
       <filename_1>: <brief description of what the file contains>
       <filename_2>: <brief description of what the file contains>
       ...
@@ -81,6 +186,9 @@ system_prompt: |-
   Notes:
       All requirements were implemented. No errors encountered. Results are based on random sampling.
   Files:
+      problem_parameters.json: Problem parameters, variables, and data in JSON format
+      solve_problem.py: Python code that reads parameters from JSON and solves the problem
+      problem_description.md: Problem description and method documentation
       solution.py: Python implementation of the simulation
       results_summary.txt: Summary statistics of simulation outputs
   """)
