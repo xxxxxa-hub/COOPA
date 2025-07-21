@@ -3,6 +3,7 @@ from pathlib import Path
 from smolagents.tools import Tool
 from datetime import datetime
 import re
+from general_tools.kb_repo_management.taxonomy_error_logger import log_taxonomy_error
 
 class IISETaxonomyManager:
     def __init__(self, taxonomy_file_path: str):
@@ -96,16 +97,17 @@ class CreateTaxonomyFolder(Tool):
         Respond with ONLY the category path, nothing else.
         """
         
-        try:
-            response = self.model.generate(classification_prompt)
-            suggested_path = response.strip()
-            if self.taxonomy_manager.validate_category_path(suggested_path):
-                return suggested_path
-        except Exception as e:
-            pass
-        
-        # Simple fallback based on content keywords
-        return self._fallback_classification(content, content_type)
+        # LiteLLMModel expects a list of messages, not a plain string
+        messages = [{"role": "user", "content": classification_prompt}]
+        response = self.model.generate(messages).content
+        suggested_path = response.strip()
+        suggested_path = None
+        if self.taxonomy_manager.validate_category_path(suggested_path):
+            return suggested_path
+        else:
+            # Log the invalid path and return error message
+            self._log_invalid_path(suggested_path, content, content_type)
+            raise ValueError(f"LLM suggested invalid path: '{suggested_path}'. This path is not in the IISE taxonomy.")
     
     def _fallback_classification(self, content: str, content_type: str):
         """Improved keyword-based fallback classification with scoring"""
@@ -268,3 +270,14 @@ class CreateTaxonomyFolder(Tool):
             clean_title = f"{clean_title}_{timestamp}"
         
         return clean_title or "general_problem"
+    
+    def _log_invalid_path(self, suggested_path: str, content: str, content_type: str, error: str = None):
+        """Log invalid paths suggested by the LLM using the new taxonomy logger"""
+        # Log the error with context (dataset and problem info will be set by the calling context)
+        log_taxonomy_error(
+            error_type="llm_suggestion",
+            suggested_path=suggested_path,
+            content=content,
+            content_type=content_type,
+            error=error
+        )
