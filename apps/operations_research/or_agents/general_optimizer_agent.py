@@ -60,7 +60,7 @@ def create_general_optimizer_agent(model_id="gpt-4.1", managed_agents=[], workin
         managed_agents=managed_agents,
         prompt_templates=general_optimizer_prompt_template,
         verbosity_level=verbosity_level,
-        additional_authorized_imports=['numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*'],
+        additional_authorized_imports=['numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*', 'json'],
         max_steps=max_steps,
         model=model,
         name="general_optimizer_agent",

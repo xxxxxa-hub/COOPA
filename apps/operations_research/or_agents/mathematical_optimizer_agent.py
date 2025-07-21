@@ -74,7 +74,7 @@ def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], w
 
     mathematical_optimizer_agent = CodeAgent(
         tools=tools,
-        additional_authorized_imports=['pyomo', 'pyomo.*', 'numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*'],
+        additional_authorized_imports=['pyomo', 'pyomo.*', 'numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*', 'json'],
         managed_agents=managed_agents,
         prompt_templates=mathematical_optimizer_prompt_template,
         verbosity_level=verbosity_level,

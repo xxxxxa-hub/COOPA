@@ -67,7 +67,7 @@ def create_combinatorial_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
 
     combinatorial_optimizer_agent = CodeAgent(
         tools=tools,
-        additional_authorized_imports=['ortools', 'ortools.*', 'numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*'],
+        additional_authorized_imports=['ortools', 'ortools.*', 'numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*', 'json'],
         managed_agents=managed_agents,
         prompt_templates=combinatorial_optimizer_prompt_template,
         verbosity_level=verbosity_level,
