@@ -64,13 +64,13 @@ def create_knowledge_curation_agent(
     model = build_model(model_id)
 
     kb_curation_tools = [
-        WriteToKnowledgeBase(idx),
-        CopyToKnowledgeBase(idx, working_directory),
-        AppendToKnowledgeBaseFile(idx),
+        WriteToKnowledgeBase(idx, taxonomy_manager),
+        CopyToKnowledgeBase(idx, working_directory, taxonomy_manager),
+        AppendToKnowledgeBaseFile(idx, taxonomy_manager),
         ListKnowledgeBaseDirectory(idx),
         SeeKnowledgeBaseFile(idx),
-        MoveOrRenameInKnowledgeBase(idx),
-        DeleteFromKnowledgeBase(idx),
+        MoveOrRenameInKnowledgeBase(idx, taxonomy_manager),
+        DeleteFromKnowledgeBase(idx, taxonomy_manager),
         SemanticSearchKnowledgeBase(idx),
         KeywordSearchKnowledgeBase(idx),
         CreateTaxonomyFolder(taxonomy_manager, idx, model),
