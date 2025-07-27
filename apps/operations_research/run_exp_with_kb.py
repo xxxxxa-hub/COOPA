@@ -52,7 +52,10 @@ def run_experiment(
     knowledge_base_directory="apps/operations_research/or_knowledge_base",
     index_dir="apps/operations_research/or_vector_store",
     working_directory=None,
-    output_path="experiment_results.jsonl"
+    output_path="experiment_results.jsonl",
+    start_index=1,
+    retry_failed=False,
+    retry_results_path=None
 ):
     
     # Initialize the knowledge base if it doesn't exist
@@ -89,6 +92,20 @@ def run_experiment(
         working_directory=working_directory,
     )
     
+    # Load existing results if retry_failed is True
+    failed_indices = set()
+    if retry_failed:
+        results_file = retry_results_path if retry_results_path else output_path
+        if Path(results_file).exists():
+            with open(results_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    result = json.loads(line)
+                    if result.get("predicted_answer") is None:
+                        failed_indices.add(result["index"])
+            print(f"Found {len(failed_indices)} questions with null predicted_answer to retry from {results_file}")
+        else:
+            print(f"Results file {results_file} does not exist")
+    
     results = []
     with open(dataset_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -96,8 +113,15 @@ def run_experiment(
             question = item["question"]
             gold_answer = item["answer"]
             idx = item.get("index", None)
-            if int(idx) != 1:
-                continue
+            
+            if retry_failed:
+                # Only process items that failed previously
+                if idx not in failed_indices:
+                    continue
+            else:
+                # Original logic: skip items below start_index
+                if int(idx) < start_index:
+                    continue
 
             # session_id = f"{cur_date_time}_{dataset_name}_{idx}"
 
@@ -155,16 +179,19 @@ if __name__ == "__main__":
     parser.add_argument("--model_id", type=str, default="gpt-4.1")
     parser.add_argument("--knowledge_base_directory", type=str, default=None)
     parser.add_argument("--output", type=str)
+    parser.add_argument("--start_index", type=int, default=1, help="Starting index for experiments (default: 1)")
+    parser.add_argument("--retry_failed", action="store_true", help="Retry questions with null predicted_answer from existing results")
+    parser.add_argument("--retry_results_path", type=str, help="Path to existing results file to check for failed questions (defaults to output path)")
     args = parser.parse_args()
 
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}").resolve()
+        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v2").resolve()
     if args.output is None:
         args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}.jsonl").resolve()
 
-    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}").resolve()
+    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v2").resolve()
 
     run_experiment(
         dataset_path=f"apps/operations_research/datasets/{args.dataset}/{args.dataset}.jsonl",
@@ -173,4 +200,7 @@ if __name__ == "__main__":
         knowledge_base_directory=args.knowledge_base_directory,
         index_dir=index_dir,
         output_path=args.output,
+        start_index=args.start_index,
+        retry_failed=args.retry_failed,
+        retry_results_path=args.retry_results_path,
     )
