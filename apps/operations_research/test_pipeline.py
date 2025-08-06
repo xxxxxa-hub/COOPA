@@ -43,12 +43,13 @@ def run_test_pipeline(
     temp_dir = tempfile.mkdtemp(prefix="test_pipeline_")
     knowledge_base_directory = Path(temp_dir) / "test_knowledge_base"
     index_dir = Path(temp_dir) / "test_vector_store"
-    working_directory = Path(temp_dir) / "test_working_directory"
+    # working_directory = Path(temp_dir) / "test_working_directory"
+    working_directory = Path("/hpc/group/fanglab/xx102/curation/temp_workspace")
     
     # Create directories
     knowledge_base_directory.mkdir(parents=True)
     index_dir.mkdir(parents=True)
-    working_directory.mkdir(parents=True)
+    working_directory.mkdir(parents=True, exist_ok=True)
     
     print(f"Temporary test directory: {temp_dir}")
     print(f"Knowledge base directory: {knowledge_base_directory}")
@@ -212,7 +213,7 @@ def run_test_pipeline(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run test pipeline with temporary directories")
-    parser.add_argument("--dataset", type=str, required=True, help="Path to the dataset JSONL file")
+    parser.add_argument("--dataset", type=str, default="nlp4lp", help="Dataset name (e.g., nlp4lp, nlp4opt, industryor) or full path to JSONL file")
     parser.add_argument("--model_id", type=str, default="gpt-4.1", help="Model ID to use")
     parser.add_argument("--indices", nargs="+", type=int, help="Specific indices to test (e.g., 15 16 21)")
     parser.add_argument("--output", type=str, help="Output path for results (optional)")
@@ -221,11 +222,17 @@ if __name__ == "__main__":
     
     cur_date_time = get_current_timestamp()
     
+    # Convert dataset name to path if it's just a name
+    if args.dataset in ["nlp4lp", "nlp4opt", "industryor"]:
+        dataset_path = f"apps/operations_research/datasets/{args.dataset}/{args.dataset}.jsonl"
+    else:
+        dataset_path = args.dataset
+    
     # Convert indices to set for faster lookup
     test_indices = set(args.indices) if args.indices else None
     
     run_test_pipeline(
-        dataset_path=args.dataset,
+        dataset_path=dataset_path,
         cur_date_time=cur_date_time,
         model_id=args.model_id,
         test_indices=test_indices,
