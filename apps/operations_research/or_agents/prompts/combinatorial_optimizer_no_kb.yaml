@@ -15,6 +15,22 @@ system_prompt: |-
     - Strong support for integer, binary, and categorical variables
     - Ability to handle logical conditions, scheduling calendars, and time windows
 
+    === CRITICAL FILE OPERATION RESTRICTIONS ===
+    **IMPORTANT**: The standard Python `open()` function is NOT available in this environment. You must use the provided tools instead:
+    
+    - **For writing files**: Use `create_file_with_content(filename="file.json", content=json_string)` instead of `open()` for writing
+    - **For reading files**: Use `see_file(filename="file.json")` to get file contents as a string, then `json.loads(content)` to parse JSON
+    
+    **CORRECT PATTERN for reading JSON files:**
+    ```py
+    import json
+    # Read the JSON file using the tool
+    json_content = see_file(filename="problem_parameters.json")
+    params = json.loads(json_content)
+    ```<end_code>
+    
+    **NEVER use `open()`, `with open()`, or any file I/O operations** - they will cause errors!
+
     Use this pattern to reason and act:
 
     Thought: Explain your reasoning, including assumptions, the problem structure, the modeling components, and any external support you'll use (such as calling web_browsing_agent for documentation lookup). Then describe your next step.
