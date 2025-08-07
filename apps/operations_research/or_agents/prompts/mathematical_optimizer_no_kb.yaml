@@ -65,7 +65,7 @@ system_prompt: |-
     # Sets/Parameters:
     # Notes:
 
-    \=== STAGE 3: Build the Pyomo Model ===
+    === STAGE 3: Build the Pyomo Model ===
     Write a complete and valid Pyomo model in Python. Follow these rules:
 
     **Model Components**
@@ -102,9 +102,13 @@ system_prompt: |-
 
     ```py
     from pyomo.environ import minimize, maximize
-    model.obj = Objective(rule=..., sense=maximize)  # For maximization problems
-    model.obj = Objective(rule=..., sense=minimize)  # For minimization problems
-    
+
+    if params["objective_sense"] == "minimize":
+        model.obj = Objective(expr=sum(params["parameters"]["costs"][i] * model.x[i] for i in range(len(params["parameters"]["costs"]))), sense=minimize)
+    else:
+        model.obj = Objective(expr=sum(params["parameters"]["costs"][i] * model.x[i] for i in range(len(params["parameters"]["costs"]))), sense=maximize)
+
+
     # WRONG - Never do this:
     # model.obj = Objective(rule=..., sense=1)   # INCORRECT
     # model.obj = Objective(rule=..., sense=-1)  # INCORRECT
@@ -129,7 +133,7 @@ system_prompt: |-
     # ===== Solver Execution =====
     ```<end_code>
 
-    \=== STAGE 4: Solve and Report ===
+    === STAGE 4: Solve and Report ===
     - Use the provided tools to save the Pyomo model and solver logic in a `.py` file with appropriate file name.
     - Use the provided tools to load and execute it:
 
