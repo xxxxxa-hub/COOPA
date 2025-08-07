@@ -30,7 +30,7 @@ def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
 
     # Load the prompt template (using no knowledge base version)
     metaheuristic_optimizer_prompt_template = yaml.safe_load(
-                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("metaheuristic_optimizer_no_kb.yaml").read_text(encoding="utf-8")
+                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("metaheuristic_optimizer.yaml").read_text(encoding="utf-8")
             )
 
     tools = [
@@ -74,7 +74,7 @@ def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
         tools=tools,
         managed_agents=managed_agents,
         prompt_templates=metaheuristic_optimizer_prompt_template,
-        additional_authorized_imports=['pymoo', 'pymoo.*', 'numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*'],
+        additional_authorized_imports=['pymoo', 'pymoo.*', 'numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*', 'json'],
         verbosity_level=verbosity_level,
         max_steps=max_steps,
         model=model,

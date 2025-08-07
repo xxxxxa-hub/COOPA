@@ -10,6 +10,7 @@ from smolagents.tools import Tool
 import shutil
 from pathlib import Path
 from general_tools.kb_repo_management.repo_indexer import RepoIndexer
+from general_tools.kb_repo_management.taxonomy_error_logger import log_taxonomy_error
 
 
 class WriteToKnowledgeBase(Tool):
@@ -26,10 +27,11 @@ class WriteToKnowledgeBase(Tool):
     }
     output_type = "string"
 
-    def __init__(self, repo_indexer: RepoIndexer):
+    def __init__(self, repo_indexer: RepoIndexer, taxonomy_manager=None):
         super().__init__()
         self.repo_indexer = repo_indexer
         self.root = Path(repo_indexer.root)
+        self.taxonomy_manager = taxonomy_manager
 
     def _get_unique_path(self, base_path: Path) -> Path:
         counter = 1
@@ -46,7 +48,41 @@ class WriteToKnowledgeBase(Tool):
             raise PermissionError("Access outside the knowledge base root is not allowed.")
         return abs_path
 
+    def _validate_taxonomy_path(self, destination_path: str) -> bool:
+        """Validate that the destination path is under a valid IISE taxonomy leaf node."""
+        if self.taxonomy_manager is None:
+            return False  # No taxonomy manager means validation fails
+        
+        # Extract the directory part of the path (remove filename)
+        path_parts = Path(destination_path).parts
+        if len(path_parts) < 2:
+            return False  # Need at least a category and filename
+        
+        # Find the parent directory that should be a valid taxonomy leaf node
+        # Start from the root and find the longest valid taxonomy path
+        valid_taxonomy_path = None
+        for i in range(1, len(path_parts)):
+            potential_path = "/".join(path_parts[:i])
+            if self.taxonomy_manager.validate_category_path(potential_path):
+                valid_taxonomy_path = potential_path
+        
+        # If we found a valid taxonomy path, the destination is valid
+        return valid_taxonomy_path is not None
+
     def forward(self, content: str, destination_path: str, overwrite: bool) -> str:
+        # Validate taxonomy path first
+        if not self._validate_taxonomy_path(destination_path):
+            # Log the validation error
+            log_taxonomy_error(
+                error_type="tool_validation",
+                tool_name="WriteToKnowledgeBase",
+                content=content[:500] + "..." if len(content) > 500 else content,
+                destination_path=destination_path,
+                overwrite=overwrite
+            )
+            
+            raise ValueError(f"Invalid destination path '{destination_path}'. The path must be under a valid IISE taxonomy leaf node.")
+        
         try:
             dst = self._safe_kb_path(destination_path)
         except PermissionError as e:
@@ -79,11 +115,12 @@ class CopyToKnowledgeBase(Tool):
     }
     output_type = "string"
 
-    def __init__(self, repo_indexer: RepoIndexer, working_dir: str):
+    def __init__(self, repo_indexer: RepoIndexer, working_dir: str, taxonomy_manager=None):
         super().__init__()
         self.repo_indexer = repo_indexer
         self.working_dir = Path(working_dir)
         self.root = Path(repo_indexer.root)
+        self.taxonomy_manager = taxonomy_manager
 
     def _get_unique_path(self, base_path: Path) -> Path:
         counter = 1
@@ -107,7 +144,41 @@ class CopyToKnowledgeBase(Tool):
             raise PermissionError("Access outside the knowledge base root is not allowed.")
         return abs_path
 
+    def _validate_taxonomy_path(self, destination_path: str) -> bool:
+        """Validate that the destination path is under a valid IISE taxonomy leaf node."""
+        if self.taxonomy_manager is None:
+            return False  # No taxonomy manager means validation fails
+        
+        # Extract the directory part of the path (remove filename)
+        path_parts = Path(destination_path).parts
+        if len(path_parts) < 2:
+            return False  # Need at least a category and filename
+        
+        # Find the parent directory that should be a valid taxonomy leaf node
+        # Start from the root and find the longest valid taxonomy path
+        valid_taxonomy_path = None
+        for i in range(1, len(path_parts)):
+            potential_path = "/".join(path_parts[:i])
+            if self.taxonomy_manager.validate_category_path(potential_path):
+                valid_taxonomy_path = potential_path
+        
+        # If we found a valid taxonomy path, the destination is valid
+        return valid_taxonomy_path is not None
+
     def forward(self, source_path: str, destination_path: str, overwrite: bool) -> str:
+        # Validate taxonomy path first
+        if not self._validate_taxonomy_path(destination_path):
+            # Log the validation error
+            log_taxonomy_error(
+                error_type="tool_validation",
+                tool_name="CopyToKnowledgeBase",
+                source_path=source_path,
+                destination_path=destination_path,
+                overwrite=overwrite
+            )
+            
+            raise ValueError(f"Invalid destination path '{destination_path}'. The path must be under a valid IISE taxonomy leaf node.")
+        
         try:
             src = self._safe_working_path(source_path)
             dst = self._safe_kb_path(destination_path)
@@ -176,10 +247,11 @@ class AppendToKnowledgeBaseFile(Tool):
     }
     output_type = "string"
 
-    def __init__(self, repo_indexer: RepoIndexer):
+    def __init__(self, repo_indexer: RepoIndexer, taxonomy_manager=None):
         super().__init__()
         self.root = Path(repo_indexer.root)
         self.repo_indexer = repo_indexer
+        self.taxonomy_manager = taxonomy_manager
 
     def _safe_kb_path(self, path: str) -> Path:
         abs_root = self.root.resolve()
@@ -188,7 +260,42 @@ class AppendToKnowledgeBaseFile(Tool):
             raise PermissionError("Access outside the knowledge base root is not allowed.")
         return abs_path
 
+    def _validate_taxonomy_path(self, target_file: str) -> bool:
+        """Validate that the target file is under a valid IISE taxonomy leaf node."""
+        if self.taxonomy_manager is None:
+            return False  # No taxonomy manager means validation fails
+        
+        # Extract the directory part of the path (remove filename)
+        path_parts = Path(target_file).parts
+        if len(path_parts) < 2:
+            return False  # Need at least a category and filename
+        
+        # Find the parent directory that should be a valid taxonomy leaf node
+        # Start from the root and find the longest valid taxonomy path
+        valid_taxonomy_path = None
+        for i in range(1, len(path_parts)):
+            potential_path = "/".join(path_parts[:i])
+            if self.taxonomy_manager.validate_category_path(potential_path):
+                valid_taxonomy_path = potential_path
+        
+        # If we found a valid taxonomy path, the destination is valid
+        return valid_taxonomy_path is not None
+
     def forward(self, target_file: str, new_content: str, insert_mode: str | None = None, match_string: str | None = None) -> str:
+        # Validate taxonomy path first
+        if not self._validate_taxonomy_path(target_file):
+            # Log the validation error
+            log_taxonomy_error(
+                error_type="tool_validation",
+                tool_name="AppendToKnowledgeBaseFile",
+                target_file=target_file,
+                new_content=new_content[:500] + "..." if len(new_content) > 500 else new_content,
+                insert_mode=insert_mode,
+                match_string=match_string
+            )
+            
+            raise ValueError(f"Invalid target file path '{target_file}'. The file must be under a valid IISE taxonomy leaf node.")
+        
         try:
             filepath = self._safe_kb_path(target_file)
         except PermissionError as e:

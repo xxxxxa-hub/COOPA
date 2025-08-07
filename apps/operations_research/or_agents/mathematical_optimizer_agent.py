@@ -43,7 +43,7 @@ def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], w
     ]
     # Load the prompt template (using no knowledge base version)
     mathematical_optimizer_prompt_template = yaml.safe_load(
-                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("mathematical_optimizer_no_kb.yaml").read_text(encoding="utf-8")
+                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("mathematical_optimizer.yaml").read_text(encoding="utf-8")
             )
     # Create the agent
     description = """
@@ -74,7 +74,7 @@ def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], w
 
     mathematical_optimizer_agent = CodeAgent(
         tools=tools,
-        additional_authorized_imports=['pyomo', 'pyomo.*', 'numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*'],
+        additional_authorized_imports=['pyomo', 'pyomo.*', 'numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*', 'json'],
         managed_agents=managed_agents,
         prompt_templates=mathematical_optimizer_prompt_template,
         verbosity_level=verbosity_level,

@@ -1,7 +1,0 @@
-# Pyomo Model Script Location
-
-The accompanying Pyomo script for this problem is saved as: bakery_prod_opt_model.py in this folder.
-
-This script contains a full Pyomo model formulation and solution for the bakery LP problem described in the summary.
-
-*If the script is not present, ensure it is uploaded to this folder for code completeness.*

@@ -14,13 +14,25 @@ TEST_DIR = Path(__file__).parent / "temp_data" / "maintenance"
 class TestKBMaintenanceTools(unittest.TestCase):
     def setUp(self):
         shutil.rmtree(TEST_DIR, ignore_errors=True)
-        (TEST_DIR / "docs").mkdir(parents=True)
-        (TEST_DIR / "tmp").mkdir(parents=True)
+        (TEST_DIR / "docs").mkdir(parents=True, exist_ok=True)
+        (TEST_DIR / "tmp").mkdir(parents=True, exist_ok=True)
+        (TEST_DIR / "linear_programming").mkdir(parents=True, exist_ok=True)
+        (TEST_DIR / "linear_programming" / "applications").mkdir(parents=True, exist_ok=True)
+        (TEST_DIR / "linear_programming" / "applications" / "diet_problem").mkdir(parents=True, exist_ok=True)
         (TEST_DIR / "docs" / "readme.md").write_text("Hello\nWorld")
         (TEST_DIR / "tmp" / "to_delete.txt").write_text("Delete me")
+        (TEST_DIR / "linear_programming" / "applications" / "diet_problem" / "test.md").write_text("Test content")
 
         self.indexer = MagicMock()
         self.indexer.root = TEST_DIR
+
+        # Create a mock taxonomy manager that accepts common test paths
+        self.mock_taxonomy_manager = MagicMock()
+        self.mock_taxonomy_manager.validate_category_path.return_value = True
+        self.mock_taxonomy_manager.get_valid_categories.return_value = [
+            "linear_programming/applications/diet_problem",
+            "integer_programming/applications/capital_budgeting"
+        ]
 
     def test_list_directory(self):
         tool = ListKnowledgeBaseDirectory(self.indexer)
@@ -38,24 +50,35 @@ class TestKBMaintenanceTools(unittest.TestCase):
         self.assertIn("does not exist", result)
 
     def test_move_or_rename(self):
-        tool = MoveOrRenameInKnowledgeBase(self.indexer)
-        tool.forward("docs/readme.md", "docs/renamed.md", overwrite=True)
-        self.assertTrue((TEST_DIR / "docs/renamed.md").exists())
+        tool = MoveOrRenameInKnowledgeBase(self.indexer, taxonomy_manager=self.mock_taxonomy_manager)
+        tool.forward("docs/readme.md", "linear_programming/applications/diet_problem/renamed.md", overwrite=True)
+        self.assertTrue((TEST_DIR / "linear_programming/applications/diet_problem/renamed.md").exists())
 
     def test_delete(self):
-        tool = DeleteFromKnowledgeBase(self.indexer)
-        result = tool.forward("tmp/to_delete.txt")
-        self.assertFalse((TEST_DIR / "tmp/to_delete.txt").exists())
+        tool = DeleteFromKnowledgeBase(self.indexer, taxonomy_manager=self.mock_taxonomy_manager)
+        result = tool.forward("linear_programming/applications/diet_problem/test.md")
+        self.assertFalse((TEST_DIR / "linear_programming/applications/diet_problem/test.md").exists())
 
     def test_delete_nonexistent(self):
-        tool = DeleteFromKnowledgeBase(self.indexer)
+        tool = DeleteFromKnowledgeBase(self.indexer, taxonomy_manager=self.mock_taxonomy_manager)
         result = tool.forward("no/such/file.txt")
         self.assertIn("does not exist", result)
 
-def tearDownModule():
-    # Clean up the temp_data directory specific to this test module
-    if TEST_DIR.exists():
-        shutil.rmtree(TEST_DIR)
+    def test_taxonomy_validation_error(self):
+        """Test that tools without taxonomy manager raise an error."""
+        # Create tools without taxonomy manager
+        move_tool = MoveOrRenameInKnowledgeBase(self.indexer, taxonomy_manager=None)
+        delete_tool = DeleteFromKnowledgeBase(self.indexer, taxonomy_manager=None)
+        
+        # Test that they raise ValueError when trying to use them
+        with self.assertRaises(ValueError):
+            move_tool.forward("docs/readme.md", "test/path.txt", overwrite=False)
+        
+        with self.assertRaises(ValueError):
+            delete_tool.forward("test/path.txt")
+
+    def tearDown(self):
+        shutil.rmtree(TEST_DIR, ignore_errors=True)
 
 if __name__ == "__main__":
     unittest.main()

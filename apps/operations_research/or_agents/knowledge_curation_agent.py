@@ -16,6 +16,8 @@ from general_tools.kb_repo_management.kb_repo_retrieval_tools import (
     SemanticSearchKnowledgeBase,
     KeywordSearchKnowledgeBase,
 )
+# Import IISE taxonomy manager
+from ..or_tools.iise_taxonomy_manager import IISETaxonomyManager, CreateTaxonomyFolder
 import yaml
 import importlib
 from pathlib import Path
@@ -28,21 +30,22 @@ from ..model_utils import build_model
 
 description = """
 **Purpose**:  
-The knowledge_curation_agent is responsible for storing, organizing, and maintaining new knowledge in the operations research knowledge base. Use this agent to add, update, move, rename, or delete files and folders within the knowledge base.
+The knowledge_curation_agent is responsible for safely copying the three standard files (parameters JSON, Python code, and problem description MD) from the working directory to the knowledge base using IISE taxonomy for proper organization.
 
 **Important:**  
-Do **not** use this agent to search for or retrieve knowledge. For retrieval, use the knowledge_retrieval_agent, which can search, view, and copy knowledge base content but cannot modify it.
+This is a SAFE version that can only copy files, not write arbitrary content. Do **not** use this agent to search for or retrieve knowledge. For retrieval, use the knowledge_retrieval_agent.
 
 **How to use**:
-- Use this agent when you want to store new knowledge, update existing content, or reorganize the knowledge base.
-- When saving files or folders from the working directory, provide the source path and a description of the content or its intended purpose. The agent will decide the best location and naming in the knowledge base.
-- The agent cannot see or manage the working directory directly; it only operates on the knowledge base and only with the information you provide.
+- Use this agent when optimizer agents have created the three standard files and need them copied to the knowledge base.
+- The agent will use IISE taxonomy to determine the appropriate folder structure.
+- The agent can only copy the three specific files: problem_parameters.json, solve_problem.py, and problem_description.md.
 
 **Capabilities**:
-- Create, overwrite, or append to files in the knowledge base.
-- Move, rename, or delete files and folders in the knowledge base.
-- Perform semantic or keyword search within the knowledge base to avoid duplication or for organization.
+- Copy files from working directory to knowledge base using IISE taxonomy.
 - List and view files/folders in the knowledge base.
+- Perform semantic or keyword search within the knowledge base.
+- Automatically create appropriate IISE taxonomy-based folder structures using the CreateTaxonomyFolder tool.
+- CANNOT write arbitrary content, modify existing files, or delete files.
 """
 
 def create_knowledge_curation_agent(
@@ -52,17 +55,24 @@ def create_knowledge_curation_agent(
     max_steps=10,
     verbosity_level=LogLevel.INFO,
 ):
+    
+    # Initialize IISE taxonomy manager
+    taxonomy_file_path = Path(__file__).parent.parent / "IISE_BoK.json"
+    taxonomy_manager = IISETaxonomyManager(str(taxonomy_file_path))
+    
+    # Build the model for taxonomy classification
+    model = build_model(model_id)
 
+    # SAFE TOOLS ONLY - For file copying workflow
+    # Removed dangerous write tools: WriteToKnowledgeBase, AppendToKnowledgeBaseFile, 
+    # MoveOrRenameInKnowledgeBase, DeleteFromKnowledgeBase
     kb_curation_tools = [
-        WriteToKnowledgeBase(idx),
-        CopyToKnowledgeBase(idx, working_directory),
-        AppendToKnowledgeBaseFile(idx),
+        CopyToKnowledgeBase(idx, working_directory, taxonomy_manager),
         ListKnowledgeBaseDirectory(idx),
         SeeKnowledgeBaseFile(idx),
-        MoveOrRenameInKnowledgeBase(idx),
-        DeleteFromKnowledgeBase(idx),
         SemanticSearchKnowledgeBase(idx),
         KeywordSearchKnowledgeBase(idx),
+        CreateTaxonomyFolder(taxonomy_manager, idx, model),
     ]
 
     # Load the prompt template
@@ -73,7 +83,7 @@ def create_knowledge_curation_agent(
 
     agent = ToolCallingAgent(
         tools=kb_curation_tools,
-        model=build_model(model_id),
+        model=model,
         prompt_templates=knowledge_curation_prompt_template,
         max_steps=max_steps,
         verbosity_level=verbosity_level,
@@ -119,8 +129,8 @@ if __name__ == "__main__":
     from pathlib import Path
     import shutil
 
-    knowledge_base_dir = Path("demo_knowledge_base")
-    working_dir = Path("demo_working_directory")
+    knowledge_base_dir = Path("demo_knowledge_base").resolve()
+    working_dir = Path("demo_working_directory").resolve()
     # Clean up any previous runs
     if knowledge_base_dir.exists():
         shutil.rmtree(knowledge_base_dir)
@@ -147,8 +157,10 @@ if __name__ == "__main__":
     # Step 1: Create the agent
     agent = create_knowledge_curation_agent(
         idx,
-        model_id="gpt-4.1",
+        # model_id="gpt-4.1",
+        model_id="Qwen/Qwen3-32B",
         working_directory=str(working_dir),
+        verbosity_level=LogLevel.DEBUG,
     )
 
     # Step 2: Add a new algorithm description (text)
