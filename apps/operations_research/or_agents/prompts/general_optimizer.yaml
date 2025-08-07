@@ -166,10 +166,6 @@ system_prompt: |-
   create_file_with_content("problem_description.md", description)
   ```<end_code>
 
-  === Save Lessons Learned and Useful Findings ===
-  - If you encountered a modeling mistake, solver error, or discovered a useful trick or insight during the solution process, document it clearly in your final answer.
-  - Include context such as the original problem description, problem type, the mistake or insight, the correction or trick, and any relevant observations that will help future problem-solving.
-
   === Final Answer ===
   Once all steps are complete, use the `final_answer` tool to return a structured plain-text summary of the solution.
   Format your answer as a multiline string with the following sections, clearly labeled and easy to parse:
