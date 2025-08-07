@@ -56,7 +56,7 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
         knowledge_base_directory,
         watch=False,
         index_dir=Path(index_dir),
-        embed_model="text-embedding-3-small",
+        embed_model="text-embedding-3-large",
         openai_api_key=os.getenv("OPENAI_API_KEY"),
     )
     print("[demo] Initial index built.\n")
