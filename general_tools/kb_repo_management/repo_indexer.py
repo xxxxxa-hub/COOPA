@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # ─────────────────────────────── Globals ────────────────────────────────────
-EMBED_MODEL = "text-embedding-3-small"
+EMBED_MODEL = "text-embedding-3-large"
 ROOT = Path("knowledge_base")
 INDEX_DIR = Path("vector_store")
 INDEX_PATH = INDEX_DIR / "faiss.index"
@@ -133,7 +133,10 @@ def chunk_file(path: Path) -> List[Dict[str, Any]]:
 # ─────────────────────────────── Embedding ──────────────────────────────────
 
 def embed_texts(texts: list[str], client, embed_model: str) -> np.ndarray:
-    resp = client.embeddings.create(model=embed_model, input=texts)
+    # Replace empty or None texts with placeholder to maintain list length
+    processed_texts = [text if text and text.strip() else "empty content" for text in texts]
+    
+    resp = client.embeddings.create(model=embed_model, input=processed_texts)
     return np.asarray([d.embedding for d in resp.data], dtype="float32")
 
 # ─────────────────────────────── Vector store ───────────────────────────────
@@ -435,7 +438,7 @@ Finds shortest paths from a source node in nonnegative weighted graphs.''',
         root,
         watch=False,
         index_dir=index_dir,
-        embed_model="text-embedding-3-small",
+        embed_model="text-embedding-3-large",
         openai_api_key=os.getenv("OPENAI_API_KEY_EMBEDDINGS"),
     )
     print("[demo] Initial index built.\n")
