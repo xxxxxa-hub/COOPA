@@ -17,7 +17,7 @@ from .web_browsing_agent import create_web_browsing_agent
 # import model utilities
 from ..model_utils import build_model
 
-def create_combinatorial_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO):
+def create_combinatorial_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO, is_curation=False):
     """
     Create an agent that will solve combinatorial optimization problems using Google's OR-Tools.
     Args:
@@ -26,7 +26,11 @@ def create_combinatorial_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
     Returns:
         CodeAgent: The configured combinatorial optimizer agent.
     """
-
+    if is_curation:
+        path = "combinatorial_optimizer_curation.yaml"
+    else:
+        path = "combinatorial_optimizer_retrieval.yaml"
+        
     tools = [
         # Add your OR-Tools code generation tool here if available, e.g. ORToolsCodeGeneration(),
         ListDir(working_directory),
@@ -62,7 +66,7 @@ def create_combinatorial_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
     """
     # Load the prompt template (using no knowledge base version)
     combinatorial_optimizer_prompt_template = yaml.safe_load(
-                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("combinatorial_optimizer.yaml").read_text(encoding="utf-8")
+                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath(path).read_text(encoding="utf-8")
             )
 
     combinatorial_optimizer_agent = CodeAgent(

@@ -19,7 +19,7 @@ from .web_browsing_agent import create_web_browsing_agent
 # import model utilities
 from ..model_utils import build_model
 
-def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO):
+def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO, is_curation=False):
     """
     Create an agent that will solve mathematical optimization problems using Pyomo and open-source solvers.
     Args:
@@ -28,7 +28,11 @@ def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], w
     Returns:
         CodeAgent: The configured mathematical optimizer agent.
     """
-
+    if is_curation:
+        path = "mathematical_optimizer_curation.yaml"
+    else:
+        path = "mathematical_optimizer_retrieval.yaml"
+        
     # Create the model using the build_model utility
     model = build_model(model_id)
 
@@ -43,7 +47,7 @@ def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], w
     ]
     # Load the prompt template (using no knowledge base version)
     mathematical_optimizer_prompt_template = yaml.safe_load(
-                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("mathematical_optimizer.yaml").read_text(encoding="utf-8")
+                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath(path).read_text(encoding="utf-8")
             )
     # Create the agent
     description = """

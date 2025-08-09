@@ -15,7 +15,7 @@ load_dotenv(override=True)
 # import model utilities
 from ..model_utils import build_model
 
-def create_general_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO):
+def create_general_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO, is_curation=False):
     """
     Create an agent that will solve general-purpose operations research problems using Python scripting, simulation, or custom algorithms.
     Args:
@@ -36,8 +36,13 @@ def create_general_optimizer_agent(model_id="gpt-4.1", managed_agents=[], workin
     model = build_model(model_id)
 
     # Load the prompt template (using no knowledge base version)
+    if is_curation:
+        path = "general_optimizer_curation.yaml"
+    else:
+        path = "general_optimizer_retrieval.yaml"
+        
     general_optimizer_prompt_template = yaml.safe_load(
-        importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("general_optimizer.yaml").read_text(encoding="utf-8")
+        importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath(path).read_text(encoding="utf-8")
     )
 
     description = """

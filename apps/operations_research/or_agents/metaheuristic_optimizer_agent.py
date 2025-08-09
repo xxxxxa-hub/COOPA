@@ -18,7 +18,7 @@ from .web_browsing_agent import create_web_browsing_agent
 from ..model_utils import build_model
 
 
-def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO):
+def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO, is_curation=False):
     """
     Create an agent that will solve heuristic and simulation-based optimization problems using pymoo.
     Args:
@@ -27,10 +27,14 @@ def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
     Returns:
         CodeAgent: The configured metaheuristic optimizer agent.
     """
-
+    if is_curation:
+        path = "metaheuristic_optimizer_curation.yaml"
+    else:
+        path = "metaheuristic_optimizer_retrieval.yaml"
+        
     # Load the prompt template (using no knowledge base version)
     metaheuristic_optimizer_prompt_template = yaml.safe_load(
-                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("metaheuristic_optimizer.yaml").read_text(encoding="utf-8")
+                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath(path).read_text(encoding="utf-8")
             )
 
     tools = [
