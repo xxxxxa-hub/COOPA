@@ -55,7 +55,7 @@ def create_knowledge_retrieval_agent(idx, model_id="gpt-4.1", working_directory=
         ListKnowledgeBaseDirectory(idx),
         SeeKnowledgeBaseFile(idx),
         CopyFromKnowledgeBase(idx, working_directory),
-        KeywordSearchKnowledgeBase(idx),
+        # KeywordSearchKnowledgeBase(idx),
         SemanticSearchKnowledgeBase(idx),
     ]
 
