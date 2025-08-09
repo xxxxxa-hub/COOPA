@@ -33,7 +33,8 @@ def run_test_pipeline(
     cur_date_time,
     model_id="gpt-4.1",
     test_indices=None,
-    output_path=None
+    output_path=None,
+    is_curation=False
 ):
     """
     Run the full pipeline with temporary directories for testing
@@ -89,6 +90,7 @@ def run_test_pipeline(
         knowledge_base_directory=str(knowledge_base_directory),
         index_dir=str(index_dir),
         working_directory=str(working_directory),
+        is_curation=is_curation,
     )
     
     # Set up taxonomy logger context
@@ -177,17 +179,18 @@ def run_test_pipeline(
             out_f.write(json.dumps(result) + "\n")
         
         # Ask the manager agent to save useful knowledge to the knowledge base
-        try:
-            knowledge_result = manager_agent.run(
-                "Please save any useful knowledge from this problem to the knowledge base. "
-                "This is at your discretion and the purpose of the knowledge base is to help you solve future problems. "
-                "Report the update you have made to the knowledge base as final answer", 
-                reset=False
-            )
-            print(f"Knowledge curation result: {knowledge_result}")
-        except Exception as e:
-            print(f"Error saving knowledge to the knowledge base: {e}")
-            continue
+        if is_curation:
+            try:
+                knowledge_result = manager_agent.run(
+                    "Please save any useful knowledge from this problem to the knowledge base. "
+                    "This is at your discretion and the purpose of the knowledge base is to help you solve future problems. "
+                    "Report the update you have made to the knowledge base as final answer", 
+                    reset=False
+                )
+                print(f"Knowledge curation result: {knowledge_result}")
+            except Exception as e:
+                print(f"Error saving knowledge to the knowledge base: {e}")
+                continue
         
         print("-" * 60)
     
@@ -217,6 +220,7 @@ if __name__ == "__main__":
     parser.add_argument("--model_id", type=str, default="gpt-4.1", help="Model ID to use")
     parser.add_argument("--indices", nargs="+", type=int, help="Specific indices to test (e.g., 15 16 21)")
     parser.add_argument("--output", type=str, help="Output path for results (optional)")
+    parser.add_argument("--is_curation", action="store_true", help="Enable knowledge curation (saves useful knowledge to knowledge base)")
     
     args = parser.parse_args()
     
@@ -237,4 +241,5 @@ if __name__ == "__main__":
         model_id=args.model_id,
         test_indices=test_indices,
         output_path=args.output,
+        is_curation=args.is_curation,
     ) 

@@ -31,7 +31,7 @@ from general_tools.file_editing.file_editing_tools import (
 # import model utilities
 from .model_utils import build_model
 
-def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/operations_research/or_knowledge_base", index_dir="apps/operations_research/or_vector_store", working_directory=None):
+def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/operations_research/or_knowledge_base", index_dir="apps/operations_research/or_vector_store", working_directory=None, is_curation=False):
     # Define the working directory
     if working_directory is None:
         # Use a temporary directory if not specified
@@ -76,37 +76,49 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
         model_id=model_id,
         verbosity_level=LogLevel.DEBUG
     )
+
+    if is_curation:
+        managed_agents = [web_browsing_agent, knowledge_curation_agent]
+    else:
+        managed_agents = [web_browsing_agent]
+
     # Create the mathematical optimizer agent
     mathematical_optimizer_agent = create_mathematical_optimizer_agent(
         model_id=model_id,
-        managed_agents=[web_browsing_agent, knowledge_curation_agent],
+        managed_agents=managed_agents,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG
     )
     # Create the combinatorial optimizer agent
     combinatorial_optimizer_agent = create_combinatorial_optimizer_agent(
         model_id=model_id,
-        managed_agents=[web_browsing_agent, knowledge_curation_agent],
+        managed_agents=managed_agents,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG
     )
     # Create the metaheuristic optimizer agent
     metaheuristic_optimizer_agent = create_metaheuristic_optimizer_agent(
         model_id=model_id,
-        managed_agents=[web_browsing_agent, knowledge_curation_agent],
+        managed_agents=managed_agents,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG
     )
     # Create the general optimizer agent
     general_optimizer_agent = create_general_optimizer_agent(
         model_id=model_id,
-        managed_agents=[web_browsing_agent, knowledge_curation_agent],
+        managed_agents=managed_agents,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG
     )
+
     # Load the prompt template
+    if is_curation:
+        manager_path = "manager_curation.yaml"
+    else:
+        manager_path = "manager_retrieval.yaml"
+
     manager_prompt_template = yaml.safe_load(
-                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath("manager_with_curation.yaml").read_text(encoding="utf-8")
+                importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath(manager_path).read_text(encoding="utf-8")
             )
 
     # Create the manager agent
@@ -121,15 +133,14 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
             ],
         managed_agents=[
             web_browsing_agent,
-            # knowledge_retrieval_agent,
-            knowledge_curation_agent,
+            knowledge_curation_agent if is_curation else knowledge_retrieval_agent,
             general_optimizer_agent,
             mathematical_optimizer_agent,
             combinatorial_optimizer_agent,
             metaheuristic_optimizer_agent,
             ],
         prompt_templates=manager_prompt_template,
-        additional_authorized_imports=['numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*'],
+        additional_authorized_imports=['numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*', 'json'],
         model=build_model(model_id),
         name="or_agent",
         description="An agent that can solve operations research problems.",
