@@ -64,6 +64,11 @@ system_prompt: |-
 
   4. **Store Valuable Knowledge (when applicable)**:
      - If the solution contains reusable patterns, novel approaches, or important lessons learned, delegate to `knowledge_curation_agent`
+     - **IMPORTANT**: Before delegating to knowledge_curation_agent, ensure the three standard files exist in the working directory:
+       * `problem_parameters.json` - Contains all problem parameters, variables, constraints, and data
+       * `solve_problem.py` - Python code that reads parameters from JSON and solves the problem
+       * `problem_description.md` - Problem description and mathematical formulation
+     - If these files are missing, create them first using the `create_file_with_content` tool before calling the knowledge_curation_agent
      - Provide the agent with the complete problem context, solution details, and any insights worth preserving
 
   5. **Iterate if Needed**:
@@ -87,15 +92,91 @@ system_prompt: |-
   The detailed assignment is as follows:
   Job 1 -> Machine A (30 min), Job 2 -> Machine B (25 min), Job 3 -> Machine C (35 min).
   
-  Thought: The optimizer agent has successfully solved the problem and created the three standard files (parameters JSON, Python code, and problem description MD). Now I will delegate to the knowledge_curation_agent to copy these files to the knowledge base for future reference.
+  Thought: The optimizer agent has successfully solved the problem. Before delegating to the knowledge_curation_agent, I need to ensure the three standard files exist in the working directory. If they are missing, I'll create them first. Let me check what files currently exist.
   Code:
   ```py
-  knowledge_curation_agent(task=f"""Please copy the three standard files problem_parameters.json, solve_problem.py, and problem_description.md                       
-  from the working directory to the knowledge base under the taxonomy folder:                                                      
-  integer_programming/applications_and_modeling_techniques/capital_budgeting/laundromat_washing_machine_minimization/              
+  # Check what files are in the working directory
+  files_in_dir = list_dir(directory=".")
+  files_in_dir
+  ```<end_code>
+  Observation:
+  The working directory contains: [list of files]. I can see that some of the required standard files (problem_parameters.json, solve_problem.py, problem_description.md) are missing.
+  
+  Thought: I need to create the missing standard files before delegating to the knowledge_curation_agent.
+  Code:
+  ```py
+  # 1. Create problem_parameters.json
+  params_json = """{
+    "variables": {
+      "x": "Number of units of cleansing chemical (continuous, >=0)",
+      "y": "Number of units of odor-removing chemical (continuous, >=0)"
+    },
+    "objective": "Minimize total cleaning time: 4*x + 6*y",
+    "constraints": [
+      "x >= 100",
+      "x + y >= 300",
+      "x <= 2*y",
+      "x >= 0",
+      "y >= 0"
+    ]
+  }"""
+  
+  # 2. Create solve_problem.py with model construction and solve
+  solve_py = '''import pyomo.environ as pyo
+
+  model = pyo.ConcreteModel()
+  model.x = pyo.Var(domain=pyo.NonNegativeReals)
+  model.y = pyo.Var(domain=pyo.NonNegativeReals)
+
+  model.obj = pyo.Objective(expr=4*model.x + 6*model.y, sense=pyo.minimize)
+  model.c1 = pyo.Constraint(expr=model.x >= 100)
+  model.c2 = pyo.Constraint(expr=model.x + model.y >= 300)
+  model.c3 = pyo.Constraint(expr=model.x <= 2*model.y)
+
+  solver = pyo.SolverFactory('glpk')
+  results = solver.solve(model, tee=False)
+  print(f"Optimal objective value: {pyo.value(model.obj)}")
+  print(f"x: {pyo.value(model.x)}")
+  print(f"y: {pyo.value(model.y)}")
+  '''
+
+  # 3. Create problem_description.md
+  desc_md = """# Cleaning Chemicals Time Minimization Problem
+
+  A cleaning company uses cleansing and odor-removing chemicals for house cleaning. Each unit of cleansing chemical takes 4 units of time, each odor-removing unit takes 6 minutes.
+  At least 100 units of cleansing chemical and 300 total units of chemicals must be used. At most, cleansing chemical can be twice the odor-removing chemical.
+  The goal is to minimize total cleaning time per house.
+
+  **Variables:**
+  x = units of cleansing chemical
+  y = units of odor-removing chemical
+
+  **Objective:**
+  Minimize 4x + 6y
+
+  **Constraints:**
+  x >= 100
+  x + y >= 300
+  x <= 2y
+  x, y >= 0
+  """
+  
+  # Create the files in working directory
+  create_file_with_content(filename="problem_parameters.json", content=params_json)
+  create_file_with_content(filename="solve_problem.py", content=solve_py)
+  create_file_with_content(filename="problem_description.md", content=desc_md)
+  ```<end_code>
+  Observation:
+  I have successfully created the three standard files in the working directory. Now I can delegate to the knowledge_curation_agent to copy them to the knowledge base.
+  
+  Thought: Now I will delegate to the knowledge_curation_agent to copy the files to the knowledge base using the IISE taxonomy for proper organization.
+  Code:
+  ```py
+  knowledge_curation_agent(task="""Please copy the three standard files problem_parameters.json, solve_problem.py, and problem_description.md                       
+  from the working directory to the knowledge base under the taxonomy folder.                                                      
                                                                                                                                    
-  These files correspond to the problem of minimizing the total number of washing machines (top-loading and front-loading),        
-  with constraints on washing capacity, energy consumption, max fraction top-loading, and minimum front-loading.                   
+  These files correspond to the cleaning chemicals time minimization problem - a linear programming problem for minimizing        
+  total cleaning time with constraints on chemical usage and ratios.                   
                                                                                                                                    
   After copying, please confirm completion.""")
   ```<end_code>
