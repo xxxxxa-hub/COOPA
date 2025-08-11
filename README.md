@@ -17,9 +17,15 @@ Create a `.env` file in the root of `COOPA` and add your API keys:
 OPENAI_API_KEY=your_openai_api_key
 # Optionally, add other keys as needed for the app you want to use
 ```
-### 4. Run an App
+### 4. Run Operations Research Experiments
+```bash
+python -m apps.operations_research.run_exp_with_kb --dataset nlp4lp --model_id gpt-4.1 --start_index 1 --is_curation
 ```
-python -m apps.literature_survey.run
-```
+
+**Parameters:**
+- `--dataset`: Choose from `nlp4lp`, `nlp4opt`, `industryor`, `complexlp`, `BWOR`
+- `--model_id`: Choose from `gpt-4.1`, `o4-mini`
+- `--start_index`: Starting index of question in the dataset (integer)
+- `--is_curation`: Add this flag for curation mode, omit for retrieval mode
 
 ---
