@@ -8,6 +8,7 @@ load_dotenv()
 
 import os
 import base64
+import random
 
 # ✅ Set Langfuse OTEL environment variables
 # LANGFUSE_PUBLIC_KEY = "pk-lf-fc94b01e-f660-4a4c-9604-4c99b27202d0"
@@ -45,6 +46,88 @@ def get_current_timestamp():
     now = datetime.now()
     return now.strftime("%Y%m%d_%H%M%S")
 
+def create_dataset_split(dataset_path, train_ratio=0.5, random_seed=42):
+    """
+    Split a dataset into train and test sets with fixed random seed for reproducibility.
+    
+    Args:
+        dataset_path (str): Path to the original dataset JSONL file
+        train_ratio (float): Ratio of data to use for training (default: 0.5 for 50%)
+        random_seed (int): Fixed random seed for reproducible splits (default: 42)
+    
+    Returns:
+        tuple: (train_indices, test_indices) - lists of question indices
+    """
+    # Load all question indices from the dataset
+    indices = []
+    with open(dataset_path, "r", encoding="utf-8") as f:
+        for line in f:
+            item = json.loads(line)
+            indices.append(item["index"])
+    
+    # Set random seed directly for reproducible results
+    random.seed(random_seed)
+    
+    # Shuffle indices
+    shuffled_indices = indices.copy()
+    random.shuffle(shuffled_indices)
+    
+    # Split into train and test
+    split_point = int(len(shuffled_indices) * train_ratio)
+    train_indices = set(shuffled_indices[:split_point])
+    test_indices = set(shuffled_indices[split_point:])
+    
+    dataset_name = Path(dataset_path).stem
+    print(f"Dataset split for {dataset_name}:")
+    print(f"  Total questions: {len(indices)}")
+    print(f"  Train set: {len(train_indices)} questions ({len(train_indices)/len(indices)*100:.1f}%)")
+    print(f"  Test set: {len(test_indices)} questions ({len(test_indices)/len(indices)*100:.1f}%)")
+    print(f"  Random seed: {random_seed}")
+    
+    return train_indices, test_indices
+
+def save_split_info(train_indices, test_indices, dataset_name, output_dir, random_seed=42):
+    """
+    Save the train/test split information to files for reference and reproducibility.
+    
+    Args:
+        train_indices (set): Set of training question indices
+        test_indices (set): Set of test question indices
+        dataset_name (str): Name of the dataset
+        output_dir (str): Directory to save split information
+        random_seed (int): Random seed used for the split
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Save train indices
+    train_file = output_dir / f"{dataset_name}_train_indices.json"
+    with open(train_file, "w", encoding="utf-8") as f:
+        json.dump(sorted(list(train_indices)), f, indent=2)
+    
+    # Save test indices
+    test_file = output_dir / f"{dataset_name}_test_indices.json"
+    with open(test_file, "w", encoding="utf-8") as f:
+        json.dump(sorted(list(test_indices)), f, indent=2)
+    
+    # Save split summary
+    summary_file = output_dir / f"{dataset_name}_split_summary.json"
+    summary = {
+        "dataset_name": dataset_name,
+        "random_seed": random_seed,
+        "total_questions": len(train_indices) + len(test_indices),
+        "train_count": len(train_indices),
+        "test_count": len(test_indices),
+        "train_ratio": len(train_indices) / (len(train_indices) + len(test_indices)),
+        "train_indices": sorted(list(train_indices)),
+        "test_indices": sorted(list(test_indices))
+    }
+    with open(summary_file, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2)
+    
+    print(f"Split information saved to {output_dir}/")
+    return train_file, test_file, summary_file
+
 def run_experiment(
     dataset_path,
     cur_date_time,
@@ -54,8 +137,31 @@ def run_experiment(
     working_directory=None,
     output_path="experiment_results.jsonl",
     start_index=1,
-    is_curation=False
+    is_curation=False,
+    split_mode=None,
+    train_ratio=0.5,
+    random_seed=42,
+    allowed_indices=None
 ):
+    
+    # Handle dataset splitting if requested
+    if split_mode is not None and allowed_indices is None:
+        train_indices, test_indices = create_dataset_split(dataset_path, train_ratio, random_seed)
+        
+        # Save split information
+        dataset_name = Path(dataset_path).stem
+        split_dir = Path(output_path).parent / "splits"
+        save_split_info(train_indices, test_indices, dataset_name, split_dir, random_seed)
+        
+        # Set allowed_indices based on split_mode
+        if split_mode == "train":
+            allowed_indices = train_indices
+            print(f"Running experiment on TRAIN set ({len(train_indices)} questions)")
+        elif split_mode == "test":
+            allowed_indices = test_indices  
+            print(f"Running experiment on TEST set ({len(test_indices)} questions)")
+        else:
+            raise ValueError(f"Invalid split_mode: {split_mode}. Must be 'train' or 'test'")
     
     # Initialize the knowledge base if it doesn't exist
     if not Path(knowledge_base_directory).exists():
@@ -105,6 +211,10 @@ def run_experiment(
             # Skip problems before start_index
             if int(idx) < start_index:
                 continue
+            
+            # Skip problems not in allowed_indices if filtering is enabled
+            if allowed_indices is not None and int(idx) not in allowed_indices:
+                continue
 
             # session_id = f"{cur_date_time}_{dataset_name}_{idx}"
 
@@ -147,9 +257,20 @@ def run_experiment(
             with open(output_path, "a", encoding="utf-8") as out_f:
                 out_f.write(json.dumps(result) + "\n")
                 
-                # ask the manager agent to save any useful knowledge to the knowledge base with error handling
-                if is_curation:
+                # Save knowledge to knowledge base only during training phase
+                if is_curation and split_mode == "train":
                     try:
+                        print(f"Training phase: saving knowledge from question {idx}")
+                        manager_agent.run("Please save any useful knowledge from this problem to the knowledge base. This is at your discretion and the purpose of the knowledge base is to help you solve future problems. Report the update you have made to the knowledge base as final answer", reset=False)
+                    except Exception as e:
+                        print(f"Error saving knowledge to the knowledge base: {e}")
+                        continue
+                elif is_curation and split_mode == "test":
+                    print(f"Test phase: using existing knowledge for question {idx}, not saving new knowledge")
+                elif is_curation and split_mode is None:
+                    # Backward compatibility: save knowledge when no split mode is specified
+                    try:
+                        print(f"No split mode: saving knowledge from question {idx}")
                         manager_agent.run("Please save any useful knowledge from this problem to the knowledge base. This is at your discretion and the purpose of the knowledge base is to help you solve future problems. Report the update you have made to the knowledge base as final answer", reset=False)
                     except Exception as e:
                         print(f"Error saving knowledge to the knowledge base: {e}")
@@ -165,16 +286,24 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str)
     parser.add_argument("--start_index", type=int, default=1, help="Starting index for experiments (default: 1)")
     parser.add_argument("--is_curation", action="store_true", help="Enable knowledge curation (saves useful knowledge to knowledge base)")
+    parser.add_argument("--split_mode", type=str, choices=["train", "test"], default=None, 
+                       help="Run on train or test split of dataset (default: None - use full dataset)")
+    parser.add_argument("--train_ratio", type=float, default=0.5, 
+                       help="Ratio of data to use for training when creating splits (default: 0.5)")
+    parser.add_argument("--random_seed", type=int, default=42, 
+                       help="Random seed for reproducible dataset splits (default: 42)")
     args = parser.parse_args()
 
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v3").resolve()
+        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v4").resolve()
     if args.output is None:
-        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}.jsonl").resolve()
+        # Include split mode in filename for clarity
+        split_suffix = f"_{args.split_mode}" if args.split_mode is not None else ""
+        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}{split_suffix}.jsonl").resolve()
 
-    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v3").resolve()
+    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v4").resolve()
 
     run_experiment(
         dataset_path=f"apps/operations_research/datasets/{args.dataset}/{args.dataset}.jsonl",
@@ -185,4 +314,7 @@ if __name__ == "__main__":
         output_path=args.output,
         start_index=args.start_index,
         is_curation=args.is_curation,
+        split_mode=args.split_mode,
+        train_ratio=args.train_ratio,
+        random_seed=args.random_seed,
     )
