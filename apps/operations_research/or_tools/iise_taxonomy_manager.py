@@ -100,7 +100,12 @@ class CreateTaxonomyFolder(Tool):
         # LiteLLMModel expects a list of messages, not a plain string
         messages = [{"role": "user", "content": classification_prompt}]
         response = self.model.generate(messages).content
-        suggested_path = response.strip()
+        
+        # Extract real answer for Qwen models that use <think>...</think> format
+        if self._is_qwen_model():
+            suggested_path = self._extract_qwen_answer(response)
+        else:
+            suggested_path = response.strip()
 
         if self.taxonomy_manager.validate_category_path(suggested_path):
             return suggested_path
@@ -109,6 +114,24 @@ class CreateTaxonomyFolder(Tool):
             self._log_invalid_path(suggested_path, content, content_type)
             raise ValueError(f"LLM suggested invalid path: '{suggested_path}'. This path is not in the IISE taxonomy.")
     
+    def _is_qwen_model(self):
+        """Check if the current model is a Qwen model"""
+        if hasattr(self.model, 'model_id'):
+            return 'Qwen' in str(self.model.model_id)
+        return False
+    
+    def _extract_qwen_answer(self, response: str):
+        """Extract the real answer from Qwen response format <think>...</think>\n\n{answer}"""
+        # Remove <think>...</think> tags and extract the answer after them
+        import re
+        # Pattern to match <think>...</think> at the beginning and extract everything after
+        pattern = r'<think>.*?</think>\s*\n*\s*(.*)'
+        match = re.search(pattern, response, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        # If no <think> tags found, return the response as-is
+        return response.strip()
+
     def _fallback_classification(self, content: str, content_type: str):
         """Improved keyword-based fallback classification with scoring"""
         content_lower = content.lower()
