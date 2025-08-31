@@ -32,6 +32,54 @@ class IISETaxonomyManager:
     
     def validate_category_path(self, path: str):
         return path in self.valid_paths
+    
+    def get_partial_taxonomy_for_path(self, invalid_path: str):
+        """Extract the partial taxonomy tree that corresponds to the invalid path"""
+        path_parts = invalid_path.strip('/').split('/')
+        current_node = self.taxonomy.get("or_knowledge_base", {})
+        partial_tree = {"or_knowledge_base": {}}
+        current_partial = partial_tree["or_knowledge_base"]
+        
+        # Navigate through the taxonomy tree following the path as far as possible
+        valid_depth = 0
+        for i, part in enumerate(path_parts):
+            if isinstance(current_node, dict) and part in current_node:
+                # This part exists in the taxonomy
+                current_partial[part] = current_node[part]
+                current_node = current_node[part]
+                current_partial = current_partial[part] if isinstance(current_partial[part], dict) else {}
+                valid_depth = i + 1
+            else:
+                # This part doesn't exist - stop here but include the parent level options
+                break
+        
+        # If we couldn't navigate at all, return the top level
+        if valid_depth == 0:
+            return self.taxonomy
+        
+        # If we navigated some way but not completely, show what's available at the deepest valid level
+        if valid_depth < len(path_parts):
+            # Navigate back to the last valid node to show available options
+            current_node = self.taxonomy.get("or_knowledge_base", {})
+            for i in range(valid_depth):
+                current_node = current_node[path_parts[i]]
+            
+            # Create a tree showing the valid path and available options at the invalid level
+            result_tree = {"or_knowledge_base": {}}
+            temp_node = result_tree["or_knowledge_base"]
+            
+            # Build the valid path
+            for i in range(valid_depth):
+                temp_node[path_parts[i]] = {}
+                temp_node = temp_node[path_parts[i]]
+            
+            # Add all available options at the current level
+            if isinstance(current_node, dict):
+                temp_node.update(current_node)
+            
+            return result_tree
+        
+        return partial_tree
 
 class CreateTaxonomyFolder(Tool):
     name = "create_taxonomy_folder"
@@ -99,7 +147,10 @@ class CreateTaxonomyFolder(Tool):
         
         # LiteLLMModel expects a list of messages, not a plain string
         messages = [{"role": "user", "content": classification_prompt}]
-        response = self.model.generate(messages).content
+        try:
+            response = self.model.generate(messages).content
+        except:
+            print("Generation Error.")
         
         # Extract real answer for Qwen models that use <think>...</think> format
         if self._is_qwen_model():
@@ -112,9 +163,11 @@ class CreateTaxonomyFolder(Tool):
         else:
             # Log the invalid path and return error message
             self._log_invalid_path(suggested_path, content, content_type)
-            raise ValueError(f"LLM suggested invalid path: '{suggested_path}'. This path is not in the IISE taxonomy.")
+            partial_taxonomy = self.taxonomy_manager.get_partial_taxonomy_for_path(suggested_path)
+            taxonomy_json = json.dumps(partial_taxonomy, indent=2)
+            raise ValueError(f"LLM suggested invalid path: '{suggested_path}'. This path is not in the IISE taxonomy. The relevant part of the IISE taxonomy should be like this: \n {taxonomy_json}")
     
-    def _is_qwen_model(self):
+    def _is_qwen_model(self):   
         """Check if the current model is a Qwen model"""
         if hasattr(self.model, 'model_id'):
             return 'Qwen' in str(self.model.model_id)
