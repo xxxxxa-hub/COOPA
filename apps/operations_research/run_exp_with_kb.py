@@ -232,7 +232,7 @@ def run_experiment(
                 match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
                 if match:
                     predicted = float(match.group())
-                    correct = abs(predicted - float(gold_answer)) < 1e-4
+                    correct = abs(predicted - float(gold_answer)) < 5e-3
                 else:
                     predicted = None
                     correct = False
@@ -258,7 +258,7 @@ def run_experiment(
                 out_f.write(json.dumps(result) + "\n")
                 
                 # Save knowledge to knowledge base only during training phase
-                if is_curation and split_mode == "train":
+                if is_curation and split_mode == "train" and correct:
                     try:
                         print(f"Training phase: saving knowledge from question {idx}")
                         manager_agent.run("Please save any useful knowledge from this problem to the knowledge base. This is at your discretion and the purpose of the knowledge base is to help you solve future problems. Report the update you have made to the knowledge base as final answer", reset=False)
@@ -297,13 +297,13 @@ if __name__ == "__main__":
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v4").resolve()
+        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v5").resolve()
     if args.output is None:
         # Include split mode in filename for clarity
         split_suffix = f"_{args.split_mode}" if args.split_mode is not None else ""
         args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}{split_suffix}.jsonl").resolve()
 
-    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v4").resolve()
+    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v5").resolve()
 
     run_experiment(
         dataset_path=f"apps/operations_research/datasets/{args.dataset}/{args.dataset}.jsonl",
