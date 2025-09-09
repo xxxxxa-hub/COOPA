@@ -26,10 +26,12 @@ def build_model(model_name):
         >>> model = build_model("Qwen/Qwen3-32B")  # Returns InferenceClientModel with nebius provider
         >>> model = build_model("google/gemma-3-27b-it")  # Returns InferenceClientModel with nebius provider
     """
-    if any(x in model_name for x in ["gpt", "o3", "o4", "claude", "gemini"]):
-        return LiteLLMModel(model_id=model_name)
+    if any(x in model_name for x in ["o3", "o4", "claude", "gemini"]):
+        return LiteLLMModel(model_id=model_name, temperature=1.0)
+    elif any(x in model_name for x in ["gpt"]):
+        return LiteLLMModel(model_id=model_name, temperature=0.7)
     elif any(x in model_name for x in ["Qwen", "gemma", "Mistral"]):
-        return InferenceClientModel(model_id=model_name, provider="nebius")
+        return InferenceClientModel(model_id=model_name, provider="nebius", temperature=0.6, top_p=0.95)
     else:
         raise ValueError(f"Unsupported model name: {model_name}")
 
