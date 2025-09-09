@@ -145,6 +145,7 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
         name="or_agent",
         description="An agent that can solve operations research problems.",
         verbosity_level=LogLevel.DEBUG,
+        stream_outputs=True
     )
     return manager_agent
 
