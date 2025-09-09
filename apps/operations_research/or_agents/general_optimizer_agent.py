@@ -70,6 +70,7 @@ def create_general_optimizer_agent(model_id="gpt-4.1", managed_agents=[], workin
         model=model,
         name="general_optimizer_agent",
         description=description,
+        stream_outputs=True
     )
 
     return general_optimizer_agent

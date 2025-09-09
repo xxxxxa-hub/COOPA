@@ -84,6 +84,7 @@ def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
         model=model,
         name="metaheuristic_optimizer_agent",
         description=description,
+        stream_outputs=True
     )
 
     return metaheuristic_optimizer_agent

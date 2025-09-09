@@ -86,6 +86,7 @@ def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], w
         model=model,
         name="mathematical_optimizer_agent",
         description=description,
+        stream_outputs=True
     )
 
     return mathematical_optimizer_agent

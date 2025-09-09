@@ -79,6 +79,7 @@ def create_combinatorial_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
         model=model,
         name="combinatorial_optimizer_agent",
         description=description,
+        stream_outputs=True
     )
 
     return combinatorial_optimizer_agent
