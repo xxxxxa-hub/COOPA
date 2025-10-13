@@ -9,6 +9,15 @@ load_dotenv()
 import os
 import base64
 import random
+import sys
+from io import StringIO
+from contextlib import redirect_stdout, redirect_stderr
+import re
+
+# Disable colored output
+# os.environ['NO_COLOR'] = '1'
+# os.environ['TERM'] = 'dumb'
+# os.environ['ANSI_COLORS_DISABLED'] = '1'
 
 # ✅ Set Langfuse OTEL environment variables
 # LANGFUSE_PUBLIC_KEY = "pk-lf-fc94b01e-f660-4a4c-9604-4c99b27202d0"
@@ -41,6 +50,26 @@ from .run import create_manager_agent
 
 # Import the knowledge base initialization function
 from general_tools.kb_repo_management.kb_initialization import create_or_knowledge_base
+
+def strip_ansi_codes(text):
+    """Remove ANSI escape codes from text."""
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
+
+class CleanOutputFile:
+    """File wrapper that strips ANSI codes before writing."""
+    def __init__(self, file):
+        self.file = file
+
+    def write(self, text):
+        clean_text = strip_ansi_codes(str(text))
+        return self.file.write(clean_text)
+
+    def flush(self):
+        return self.file.flush()
+
+    def __getattr__(self, name):
+        return getattr(self.file, name)
 
 def get_current_timestamp():
     now = datetime.now()
@@ -141,7 +170,8 @@ def run_experiment(
     split_mode=None,
     train_ratio=0.5,
     random_seed=42,
-    allowed_indices=None
+    allowed_indices=None,
+    log_to_file=False
 ):
     
     # Handle dataset splitting if requested
@@ -201,6 +231,11 @@ def run_experiment(
     )
     
     results = []
+
+    # Create logs directory
+    log_dir = Path(output_path).parent / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
     with open(dataset_path, "r", encoding="utf-8") as f:
         for line in f:
             item = json.loads(line)
@@ -225,22 +260,78 @@ def run_experiment(
 
                 # Ask the agent to solve the problem
             prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
-            try:
-                agent_response = manager_agent.run(prompt, reset=True)
-                # Try to extract a number from the response
-                import re
-                match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
-                if match:
-                    predicted = float(match.group())
-                    correct = abs(predicted - float(gold_answer)) < 5e-3
-                else:
+
+            if log_to_file:
+                # Create log file for this question
+                model_name = model_id.replace('/', '-').replace('.', '_')
+                split_suffix = f"_{split_mode}" if split_mode is not None else ""
+                retrieval_suffix = "_retrieval" if is_curation else "_no-retrieval"
+                log_file = log_dir / f"{dataset_name}_{model_name}{split_suffix}{retrieval_suffix}_question_{idx}_log.txt"
+
+                # Save original stdout/stderr
+                original_stdout = sys.stdout
+                original_stderr = sys.stderr
+
+                try:
+                    with open(log_file, 'w', encoding='utf-8') as f_log:
+                        # Write header
+                        f_log.write(f"=== Dataset: {dataset_name} | Model: {model_id} | Question {idx} ===\n\n")
+                        f_log.write(f"Prompt:\n{prompt}\n\n")
+                        f_log.write(f"{'='*80}\n\n")
+
+                        # Wrap file with ANSI code stripper
+                        clean_log = CleanOutputFile(f_log)
+
+                        # Redirect stdout/stderr to clean file wrapper
+                        sys.stdout = clean_log
+                        sys.stderr = clean_log
+
+                        try:
+                            agent_response = manager_agent.run(prompt, reset=True)
+                            # Try to extract a number from the response
+                            import re
+                            match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
+                            if match:
+                                predicted = float(match.group())
+                                correct = abs(predicted - float(gold_answer)) < 5e-3
+                            else:
+                                predicted = None
+                                correct = False
+                        except Exception as e:
+                            agent_response = str(e)
+                            predicted = None
+                            correct = False
+
+                        # Restore stdout/stderr before writing summary
+                        sys.stdout = original_stdout
+                        sys.stderr = original_stderr
+
+                        # Write summary to log file
+                        f_log.write(f"\n{'='*80}\n")
+                        f_log.write(f"Final Response: {agent_response}\n")
+                        f_log.write(f"\nGold Answer: {gold_answer}\n")
+                        f_log.write(f"Predicted Answer: {predicted}\n")
+                        f_log.write(f"Correct: {correct}\n")
+                finally:
+                    # Always restore stdout/stderr even if there's an error
+                    sys.stdout = original_stdout
+                    sys.stderr = original_stderr
+            else:
+                try:
+                    agent_response = manager_agent.run(prompt, reset=True)
+                    # Try to extract a number from the response
+                    import re
+                    match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
+                    if match:
+                        predicted = float(match.group())
+                        correct = abs(predicted - float(gold_answer)) < 5e-3
+                    else:
+                        predicted = None
+                        correct = False
+                except Exception as e:
+                    agent_response = str(e)
                     predicted = None
                     correct = False
-            # Handle any exceptions that occur during the agent's execution
-            except Exception as e:
-                agent_response = str(e)
-                predicted = None
-                correct = False
 
             result = {
                 "index": idx,
@@ -292,6 +383,8 @@ if __name__ == "__main__":
                        help="Ratio of data to use for training when creating splits (default: 0.5)")
     parser.add_argument("--random_seed", type=int, default=42, 
                        help="Random seed for reproducible dataset splits (default: 42)")
+    parser.add_argument("--log_to_file", action="store_true",
+                       help="Enable logging of agent output to individual log files for each question")
     args = parser.parse_args()
 
     cur_date_time = get_current_timestamp()
@@ -317,4 +410,5 @@ if __name__ == "__main__":
         split_mode=args.split_mode,
         train_ratio=args.train_ratio,
         random_seed=args.random_seed,
+        log_to_file=args.log_to_file,
     )
