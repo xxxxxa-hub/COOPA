@@ -10,7 +10,7 @@ system_prompt: |-
     ```py
     import json
     # Read the JSON file using the tool
-    json_content = see_file(filename="problem_parameters.json")
+    json_content = see_file(filename="parameters.json")
     params = json.loads(json_content)
     ```<end_code>
     

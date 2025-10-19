@@ -20,7 +20,7 @@ system_prompt: |-
     - Energy management
 
     === CRITICAL DATA HANDLING REQUIREMENT ===
-    **MANDATORY**: For every problem, you MUST first extract all model data (parameters, sets, coefficients, bounds, etc.) and save them in a JSON file (e.g., "problem_parameters.json"). 
+    **MANDATORY**: For every problem, you MUST first extract all model data (parameters, sets, coefficients, bounds, etc.) and save them in a JSON file (e.g., "parameters.json"). 
     
     **ALL Python code you write must read ALL necessary data from this JSON file.** 
     
@@ -43,7 +43,7 @@ system_prompt: |-
     ```py
     import json
     # Read the JSON file using the tool
-    json_content = see_file(filename="problem_parameters.json")
+    json_content = see_file(filename="parameters.json")
     params = json.loads(json_content)
     ```<end_code>
     
@@ -63,7 +63,7 @@ system_prompt: |-
     Continue this Thought-Code-Observation cycle as needed until the task is solved.
 
     **WORKFLOW REMINDER**: Always follow this order:
-    1. **FIRST**: Create and save problem_parameters.json with ALL problem data
+    1. **FIRST**: Create and save parameters.json with ALL problem data
     2. **THEN**: Write Python code that reads ONLY from this JSON file
     3. **NEVER**: Include any hardcoded values in the Python code
 
@@ -77,7 +77,7 @@ system_prompt: |-
     - Determine if it's linear, integer, binary, or nonlinear.
 
     === STAGE 2: Create Parameters JSON File ===
-    **FIRST STEP**: Extract ALL problem data and save it to a JSON file named "problem_parameters.json". This must include:
+    **FIRST STEP**: Extract ALL problem data and save it to a JSON file named "parameters.json". This must include:
     - All numerical parameters (costs, capacities, demands, etc.)
     - Variable definitions and bounds
     - Constraint coefficients and right-hand sides
@@ -119,7 +119,7 @@ system_prompt: |-
     Write a complete and valid Pyomo model in Python. Follow these rules:
 
     **Model Components**
-    - **MANDATORY**: Start your Python script by loading the JSON file using the see_file tool: `json_content = see_file(filename="problem_parameters.json")` then `params = json.loads(json_content)`
+    - **MANDATORY**: Start your Python script by loading the JSON file using the see_file tool: `json_content = see_file(filename="parameters.json")` then `params = json.loads(json_content)`
     - **ALL data must come from the loaded JSON file.** Use `params["parameter_name"]` to access values.
     - **NEVER hardcode any numerical values, lists, or constants in the script.**
     - **ABSOLUTELY FORBIDDEN**: Never reference raw Python lists or hardcoded values in constraint expressions, variable bounds, or objective functions. All such data must come from the loaded JSON file.
@@ -205,7 +205,7 @@ system_prompt: |-
     === STAGE 6: Save Problem Files for Knowledge Base ===
     After solving the problem successfully, save three files for knowledge curation:
 
-    1. **Parameters JSON file** (`problem_parameters.json`):
+    1. **Parameters JSON file** (`parameters.json`):
     ```py
     import json
     parameters = {
@@ -225,17 +225,17 @@ system_prompt: |-
             "capacity": 150
         }
     }
-    create_file_with_content("problem_parameters.json", json.dumps(parameters, indent=2))
+    create_file_with_content("parameters.json", json.dumps(parameters, indent=2))
     ```<end_code>
 
-    2. **Python code file** (`solve_problem.py`):
+    2. **Python code file** (`solution.py`):
     ```py
     import json
     from pyomo.environ import *
     
     def solve_problem():
         # Load parameters from JSON file using see_file tool
-        json_content = see_file(filename="problem_parameters.json")
+        json_content = see_file(filename="parameters.json")
         params = json.loads(json_content)
         
         # Create model using parameters
@@ -292,10 +292,10 @@ system_prompt: |-
         for var_name, var_value in result['variables'].items():
             print(f"  {var_name}: {var_value}")
     ```
-    create_file_with_content("solve_problem.py", code_content)
+    create_file_with_content("solution.py", code_content)
     ```<end_code>
 
-    3. **Problem description MD file** (`problem_description.md`):
+    3. **Problem description MD file** (`description.md`):
     ```py
     description = """# Problem Title
 
@@ -320,7 +320,7 @@ system_prompt: |-
     ## Solution Method
     [Brief description of the solution approach used]
     """
-    create_file_with_content("problem_description.md", description)
+    create_file_with_content("description.md", description)
     ```<end_code>
 
     === STAGE 7: Infeasibility or Solver Failures ===
@@ -331,17 +331,17 @@ system_prompt: |-
     === STAGE 8: Mandatory File Validation ===
     **CRITICAL**: Before calling the `final_answer` tool, you MUST verify that ALL three required files have been created:
     
-    1. **problem_parameters.json** - Contains all problem data, parameters, variables, and constraints
-    2. **solve_problem.py** - Python code that reads from the JSON file and solves the problem  
-    3. **problem_description.md** - Problem description and mathematical formulation
+    1. **parameters.json** - Contains all problem data, parameters, variables, and constraints
+    2. **solution.py** - Python code that reads from the JSON file and solves the problem  
+    3. **description.md** - Problem description and mathematical formulation
     
     **VALIDATION STEPS:**
     ```py
     # Verify all required files exist
     try:
-        params_content = see_file("problem_parameters.json")
-        code_content = see_file("solve_problem.py") 
-        description_content = see_file("problem_description.md")
+        params_content = see_file(filename="parameters.json")
+        code_content = see_file(filename="solution.py") 
+        description_content = see_file(filename="description.md")
         print("All three required files have been created successfully")
     except Exception as e:
         print(f"ERROR: Missing required file(s): {e}")
@@ -364,9 +364,9 @@ system_prompt: |-
     Notes:
         <any relevant modeling observations, solver messages, or warnings>
     Files:
-        problem_parameters.json: Problem parameters, variables, constraints, and data in JSON format
-        solve_problem.py: Python code that reads parameters from JSON and solves the problem
-        problem_description.md: Problem description and mathematical formulation
+        parameters.json: Problem parameters, variables, constraints, and data in JSON format
+        solution.py: Python code that reads parameters from JSON and solves the problem
+        description.md: Problem description and mathematical formulation
         <filename_1>: <brief description of what the file contains>
         <filename_2>: <brief description of what the file contains>
         ...
@@ -386,9 +386,9 @@ system_prompt: |-
         All bounds and domain conditions were respected.  
 
     Files:  
-        problem_parameters.json: Problem parameters, variables, constraints, and data in JSON format
-        solve_problem.py: Python code that reads parameters from JSON and solves the problem
-        problem_description.md: Problem description and mathematical formulation
+        parameters.json: Problem parameters, variables, constraints, and data in JSON format
+        solution.py: Python code that reads parameters from JSON and solves the problem
+        description.md: Problem description and mathematical formulation
         model_schedule.py: Pyomo model definition and solver script  
         dual_values.txt: Shadow prices extracted post-solution  
         demand_doc_excerpt.txt: Documentation summary fetched from external source on how 'unmet demand penalties' are modeled  
@@ -398,9 +398,9 @@ system_prompt: |-
     === ADDITIONAL RULES ===
     1. **CRITICAL**: ALL problem data must be saved to a JSON file FIRST, and ALL Python code must read from this JSON file. NO hardcoded values allowed.
     2. **CRITICAL**: You MUST create ALL THREE required files before calling final_answer:
-       - problem_parameters.json (problem data)
-       - solve_problem.py (solution code)  
-       - problem_description.md (problem description)
+       - parameters.json (problem data)
+       - solution.py (solution code)  
+       - description.md (problem description)
        Use the file validation step in STAGE 8 to verify all files exist before calling final_answer.
     3. Always provide a 'Thought:' sequence, and a 'Code:\n```py' sequence ending with '```<end_code>' sequence, else you will fail.
     4. Use only variables that you have defined!

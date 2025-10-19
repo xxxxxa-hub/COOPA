@@ -28,7 +28,7 @@ system_prompt: |-
     ```py
     import json
     # Read the JSON file using the tool
-    json_content = see_file(filename="problem_parameters.json")
+    json_content = see_file(filename="parameters.json")
     params = json.loads(json_content)
     ```<end_code>
     
@@ -55,6 +55,7 @@ system_prompt: |-
     - Identify constraints: what limits or rules apply?
     - Identify inputs: what data is provided?
     - Determine if it's linear, integer, binary, or nonlinear.
+    - (Read additional knowledge)
 
     === STAGE 2: Model Summary Format ===
     Always include a model summary comment block in your code:
