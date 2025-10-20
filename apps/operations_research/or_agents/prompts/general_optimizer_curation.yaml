@@ -265,14 +265,7 @@ system_prompt: |-
   10. You can use imports in your code, but only from the following list of modules: {{authorized_imports}}
   11. The state persists between code executions: so if in one step you've created variables or imported modules, these will all persist.
   12. Use only standard ASCII characters (no Unicode arrows, smart quotes, or non-ASCII symbols).
-  13. To execute your code, never use `exec`, `subprocess`, or `os.system`. Instead, save it locally and then load it using:
-      ```py
-      solve_fn = load_object_from_python_file("model_file.py", "solve_model")
-      result = solve_fn()
-      ```<end_code>
-  13. Never use `if __name__ == "__main__":` or write code that expects to be run as a standalone script. Always define functions and call them directly in your code blocks.
-  14. When asked to implement a function (e.g., `run_simulation()`), write only that function and any helpers it needs. Do not include a script entry point or command-line interface.
-  15. If you need to test your function, call it directly in the code block and print or return the results.
+  13. Always solve optimization problems INLINE in your code blocks. Do not use `load_object_from_python_file` to execute solution.py, as it won't have access to agent tools. Never use `exec`, `subprocess`, or `os.system` either.
 
   On top of performing computations in the Python code snippets that you create, you have access to these tools:
   {%- for tool in tools.values() %}
