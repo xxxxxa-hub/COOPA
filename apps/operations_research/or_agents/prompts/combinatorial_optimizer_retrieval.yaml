@@ -9,9 +9,12 @@ system_prompt: |-
     **CORRECT PATTERN for reading JSON files:**
     ```py
     import json
-    # Read the JSON file using the tool
-    json_content = see_file(filename="parameters.json")
-    params = json.loads(json_content)
+    import re
+    # Read the JSON file using the tool (note: see_file returns content with line numbers)
+    raw_content = see_file(filename="parameters.json")
+    # Remove line number prefixes (e.g., "1: ", "2: ") before parsing JSON
+    cleaned_content = "\n".join(re.sub(r"^\s*\d+:\s*", "", line) for line in raw_content.splitlines())
+    params = json.loads(cleaned_content)
     ```<end_code>
     
     **NEVER use `open()`, `with open()`, or any file I/O operations** - they will cause errors!
@@ -94,6 +97,29 @@ system_prompt: |-
        - Follow the same constraint formulation patterns
        - Adapt the data format to match your problem
        - Keep the same solver configuration if applicable
+
+    **CRITICAL - Code Adaptation for Agent Environment:**
+    The retrieved `solution.py` uses standard Python file I/O (`open()`) for standalone execution.
+    **You MUST adapt this code to work in the agent environment:**
+
+    INCORRECT - DO NOT directly execute the retrieved code (it won't work in agent environment):
+    ```py
+    # This WON'T work - open() is not available in agent environment
+    with open("parameters.json", "r") as f:
+        params = json.load(f)
+    ```<end_code>
+
+    CORRECT - Adapt the code to use see_file():
+    ```py
+    # This WILL work - use see_file tool and clean line numbers
+    import json
+    import re
+    raw = see_file(filename="parameters.json")
+    cleaned = "\n".join(re.sub(r"^\s*\d+:\s*", "", line) for line in raw.splitlines())
+    params = json.loads(cleaned)
+    ```<end_code>
+
+    Then build and solve the model **INLINE** using the retrieved code as a reference pattern.
 
     **If NO retrieved examples exist:**
     - Proceed to solve the problem from scratch using best practices

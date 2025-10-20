@@ -42,9 +42,12 @@ system_prompt: |-
     **CORRECT PATTERN for reading JSON files:**
     ```py
     import json
-    # Read the JSON file using the tool
-    json_content = see_file(filename="parameters.json")
-    params = json.loads(json_content)
+    import re
+    # Read the JSON file using the tool (note: see_file returns content with line numbers)
+    raw_content = see_file(filename="parameters.json")
+    # Remove line number prefixes (e.g., "1: ", "2: ") before parsing JSON
+    cleaned_content = "\n".join(re.sub(r"^\s*\d+:\s*", "", line) for line in raw_content.splitlines())
+    params = json.loads(cleaned_content)
     ```<end_code>
     
     **NEVER use `open()`, `with open()`, or any file I/O operations** - they will cause errors!
@@ -126,7 +129,14 @@ system_prompt: |-
     Write a complete and valid Pyomo model in Python. Follow these rules:
 
     **Model Components**
-    - **MANDATORY**: Start your Python script by loading the JSON file using the see_file tool: `json_content = see_file(filename="parameters.json")` then `params = json.loads(json_content)`
+    - **MANDATORY**: Start your Python script by loading the JSON file using the see_file tool:
+      ```py
+      import json
+      import re
+      raw_content = see_file(filename="parameters.json")
+      cleaned_content = "\n".join(re.sub(r"^\s*\d+:\s*", "", line) for line in raw_content.splitlines())
+      params = json.loads(cleaned_content)
+      ```<end_code>
     - **ALL data must come from the loaded JSON file.** Use `params["parameter_name"]` to access values.
     - **NEVER hardcode any numerical values, lists, or constants in the script.**
     - **ABSOLUTELY FORBIDDEN**: Never reference raw Python lists or hardcoded values in constraint expressions, variable bounds, or objective functions. All such data must come from the loaded JSON file.
@@ -196,18 +206,40 @@ system_prompt: |-
     ```<end_code>
 
     === STAGE 5: Solve and Report ===
-    - Use the provided tools to save the Pyomo model and solver logic in a `.py` file with appropriate file name.
-    - Use the provided tools to load and execute it:
+    **IMPORTANT**: Solve the optimization problem INLINE in your code block, not by loading external files.
 
+    The workflow is:
+    1. Read parameters.json using see_file (with line number cleaning)
+    2. Build the Pyomo model inline using the parameters
+    3. Solve with the appropriate solver (GLPK/IPOPT)
+    4. Extract and report results
+
+    Example:
     ```py
-    solve_fn = load_object_from_python_file("model_file.py", "solve_model")
-    result = solve_fn()
+    import json
+    import re
+    from pyomo.environ import ConcreteModel, Var, NonNegativeReals, Objective, Constraint, SolverFactory, value, minimize
+
+    # Load parameters
+    raw = see_file(filename="parameters.json")
+    cleaned = "\n".join(re.sub(r"^\s*\d+:\s*", "", line) for line in raw.splitlines())
+    params = json.loads(cleaned)
+
+    # Build model
+    model = ConcreteModel()
+    # ... define variables, objective, constraints using params ...
+
+    # Solve
+    solver = SolverFactory('glpk')
+    result = solver.solve(model)
+
+    # Report results
+    objective_value = value(model.obj)
+    print(f"Objective: {objective_value}")
+    # ... print variable values ...
     ```<end_code>
 
-    - Print or return:
-    * Solver status and termination condition
-    * Objective value
-    * Values of all decision variables
+    **Note**: Do NOT use `load_object_from_python_file` to execute solution.py, as it won't have access to agent tools like `see_file`.
 
     === STAGE 6: Save Problem Files for Knowledge Base ===
     After solving the problem successfully, save three files for knowledge curation:
@@ -236,14 +268,18 @@ system_prompt: |-
     ```<end_code>
 
     2. **Python code file** (`solution.py`):
+    **IMPORTANT**: This file is for documentation and knowledge base storage only.
+    It should be a standalone, executable Python script that uses standard file I/O.
+
     ```py
     import json
     from pyomo.environ import *
-    
+
     def solve_problem():
-        # Load parameters from JSON file using see_file tool
-        json_content = see_file(filename="parameters.json")
-        params = json.loads(json_content)
+        # Load parameters from JSON file
+        # This uses standard Python file I/O for standalone execution
+        with open("parameters.json", "r") as f:
+            params = json.load(f)
         
         # Create model using parameters
         model = ConcreteModel()
@@ -311,9 +347,9 @@ system_prompt: |-
 
     ## Mathematical Formulation
     - **Objective**: Minimize/Maximize [objective function]
-    - **Variables**: 
-        - x1: [description]
-        - x2: [description]
+    - **Variables**:
+        - x1: [description] (Type: continuous/integer/binary)
+        - x2: [description] (Type: continuous/integer/binary)
     - **Constraints**:
         - [constraint 1 description]
         - [constraint 2 description]
@@ -419,11 +455,7 @@ system_prompt: |-
     10. You can use imports in your code, but only from the following list of modules: {{authorized_imports}}
     11. The state persists between code executions: so if in one step you've created variables or imported modules, these will all persist.
     12. Use only standard ASCII characters (no Unicode arrows, smart quotes, or non-ASCII symbols).
-    13. To execute your code, never use `exec`, `subprocess`, or `os.system`. Instead, save it locally and then load it using:
-        ```py
-        solve_fn = load_object_from_python_file("model_file.py", "solve_model")
-        result = solve_fn()
-        ```<end_code>
+    13. Always solve optimization problems INLINE in your code blocks. Do not use `load_object_from_python_file` to execute solution.py, as it won't have access to agent tools. Never use `exec`, `subprocess`, or `os.system` either.
 
     On top of performing computations in the Python code snippets that you create, you have access to these tools:
     {%- for tool in tools.values() %}

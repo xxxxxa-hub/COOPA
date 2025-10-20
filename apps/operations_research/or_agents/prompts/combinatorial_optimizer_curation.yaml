@@ -24,9 +24,12 @@ system_prompt: |-
     **CORRECT PATTERN for reading JSON files:**
     ```py
     import json
-    # Read the JSON file using the tool
-    json_content = see_file(filename="parameters.json")
-    params = json.loads(json_content)
+    import re
+    # Read the JSON file using the tool (note: see_file returns content with line numbers)
+    raw_content = see_file(filename="parameters.json")
+    # Remove line number prefixes (e.g., "1: ", "2: ") before parsing JSON
+    cleaned_content = "\n".join(re.sub(r"^\s*\d+:\s*", "", line) for line in raw_content.splitlines())
+    params = json.loads(cleaned_content)
     ```<end_code>
     
     **NEVER use `open()`, `with open()`, or any file I/O operations** - they will cause errors!
@@ -130,18 +133,39 @@ system_prompt: |-
     ```<end_code>
 
     === STAGE 4: Solve and Report ===
-    - Use the provided tools to save the OR-Tools model and solver logic in a `.py` file with an appropriate file name.
-    - Use the provided tools to load and execute it:
+    **IMPORTANT**: Solve the optimization problem INLINE in your code block, not by loading external files.
 
+    The workflow is:
+    1. Read parameters.json using see_file (with line number cleaning)
+    2. Build the OR-Tools model inline using the parameters
+    3. Solve with the appropriate solver
+    4. Extract and report results
+
+    Example:
     ```py
-    solve_fn = load_object_from_python_file("model_file.py", "solve_model")
-    result = solve_fn()
+    import json
+    import re
+    from ortools.constraint_solver import pywrapcp, routing_enums_pb2
+
+    # Load parameters
+    raw = see_file(filename="parameters.json")
+    cleaned = "\n".join(re.sub(r"^\s*\d+:\s*", "", line) for line in raw.splitlines())
+    params = json.loads(cleaned)
+
+    # Build routing model
+    manager = pywrapcp.RoutingIndexManager(...)
+    routing = pywrapcp.RoutingModel(manager)
+    # ... define distance callback, constraints, etc. using params ...
+
+    # Solve
+    solution = routing.SolveWithParameters(search_parameters)
+
+    # Report results
+    print(f"Objective: {solution.ObjectiveValue()}")
+    # ... print routes and other details ...
     ```<end_code>
 
-    - Print or return:
-        * Solver status and termination condition
-        * Objective value
-        * Values of all decision variables
+    **Note**: Do NOT use `load_object_from_python_file` to execute solution.py, as it won't have access to agent tools like `see_file`.
 
     === STAGE 5: Save Problem Files for Knowledge Base ===
     After solving the problem successfully, save three files for knowledge curation:
@@ -172,15 +196,19 @@ system_prompt: |-
     ```<end_code>
 
     2. **Python code file** (`solution.py`):
+    **IMPORTANT**: This file is for documentation and knowledge base storage only.
+    It should be a standalone, executable Python script that uses standard file I/O.
+
     ```py
     import json
     from ortools.constraint_solver import routing_enums_pb2
     from ortools.constraint_solver import pywrapcp
-    
+
     def solve_problem():
-        # Load parameters from JSON file using see_file tool
-        json_content = see_file(filename="parameters.json")
-        params = json.loads(json_content)
+        # Load parameters from JSON file
+        # This uses standard Python file I/O for standalone execution
+        with open("parameters.json", "r") as f:
+            params = json.load(f)
         
         # Create routing model using parameters
         manager = pywrapcp.RoutingIndexManager(
@@ -258,9 +286,9 @@ system_prompt: |-
 
     ## Mathematical Formulation
     - **Objective**: Minimize/Maximize [objective function]
-    - **Variables**: 
-        - x_ij: [description]
-        - u_j: [description]
+    - **Variables**:
+        - x_ij: [description] (Type: binary/integer)
+        - u_j: [description] (Type: binary/integer/continuous)
     - **Constraints**:
         - [constraint 1 description]
         - [constraint 2 description]
@@ -364,11 +392,7 @@ system_prompt: |-
     10. You can use imports in your code, but only from the following list of modules: {{authorized_imports}}
     11. The state persists between code executions: so if in one step you've created variables or imported modules, these will all persist.
     12. Use only standard ASCII characters (no Unicode arrows, smart quotes, or non-ASCII symbols).
-    13. To execute your code, never use `exec`, `subprocess`, or `os.system`. Instead, save it locally and then load it using:
-        ```py
-        solve_fn = load_object_from_python_file("model_file.py", "solve_model")
-        result = solve_fn()
-        ```<end_code>
+    13. Always solve optimization problems INLINE in your code blocks. Do not use `load_object_from_python_file` to execute solution.py, as it won't have access to agent tools. Never use `exec`, `subprocess`, or `os.system` either.
 
     On top of performing computations in the Python code snippets that you create, you have access to these tools:
     {%- for tool in tools.values() %}

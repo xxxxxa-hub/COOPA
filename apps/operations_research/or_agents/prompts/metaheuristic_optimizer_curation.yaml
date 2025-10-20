@@ -24,9 +24,12 @@ system_prompt: |-
     **CORRECT PATTERN for reading JSON files:**
     ```py
     import json
-    # Read the JSON file using the tool
-    json_content = see_file(filename="parameters.json")
-    params = json.loads(json_content)
+    import re
+    # Read the JSON file using the tool (note: see_file returns content with line numbers)
+    raw_content = see_file(filename="parameters.json")
+    # Remove line number prefixes (e.g., "1: ", "2: ") before parsing JSON
+    cleaned_content = "\n".join(re.sub(r"^\s*\d+:\s*", "", line) for line in raw_content.splitlines())
+    params = json.loads(cleaned_content)
     ```<end_code>
     
     **NEVER use `open()`, `with open()`, or any file I/O operations** - they will cause errors!
@@ -121,18 +124,45 @@ system_prompt: |-
     - Utilize `pymoo`'s visualization tools to analyze Pareto fronts and solution distributions.
 
     === STAGE 4: Solve and Report ===
-    - Use the provided tools to save the `pymoo` model and solver logic in a `.py` file with an appropriate file name.
-    - Use the provided tools to load and execute it:
+    **IMPORTANT**: Solve the optimization problem INLINE in your code block, not by loading external files.
 
+    The workflow is:
+    1. Read parameters.json using see_file (with line number cleaning)
+    2. Build the pymoo problem class inline using the parameters
+    3. Run the algorithm with the appropriate settings
+    4. Extract and report results
+
+    Example:
     ```py
-    solve_fn = load_object_from_python_file("model_file.py", "solve_model")
-    result = solve_fn()
+    import json
+    import re
+    from pymoo.core.problem import Problem
+    from pymoo.algorithms.moo.nsga2 import NSGA2
+    from pymoo.optimize import minimize
+
+    # Load parameters
+    raw = see_file(filename="parameters.json")
+    cleaned = "\n".join(re.sub(r"^\s*\d+:\s*", "", line) for line in raw.splitlines())
+    params = json.loads(cleaned)
+
+    # Define problem class inline
+    class MyProblem(Problem):
+        def __init__(self):
+            super().__init__(n_var=params["n_var"], n_obj=params["n_obj"], ...)
+        def _evaluate(self, x, out, *args, **kwargs):
+            # ... evaluation logic using params ...
+
+    # Solve
+    problem = MyProblem()
+    algorithm = NSGA2(pop_size=params["algorithm"]["pop_size"])
+    result = minimize(problem, algorithm, termination=...)
+
+    # Report results
+    print(f"Best solutions: {result.X}")
+    print(f"Objective values: {result.F}")
     ```<end_code>
 
-    - Print or return:
-    * Solver status and termination condition
-    * Objective values
-    * Decision variable values
+    **Note**: Do NOT use `load_object_from_python_file` to execute solution.py, as it won't have access to agent tools like `see_file`.
 
     === STAGE 5: Save Problem Files for Knowledge Base ===
     After solving the problem successfully, save three files for knowledge curation:
@@ -168,6 +198,9 @@ system_prompt: |-
     ```<end_code>
 
     2. **Python code file** (`solution.py`):
+    **IMPORTANT**: This file is for documentation and knowledge base storage only.
+    It should be a standalone, executable Python script that uses standard file I/O.
+
     ```py
     import json
     import numpy as np
@@ -176,11 +209,12 @@ system_prompt: |-
     from pymoo.factory import get_sampling, get_crossover, get_mutation
     from pymoo.factory import get_termination
     from pymoo.optimize import minimize
-    
+
     def solve_problem():
-        # Load parameters from JSON file using see_file tool
-        json_content = see_file(filename="parameters.json")
-        params = json.loads(json_content)
+        # Load parameters from JSON file
+        # This uses standard Python file I/O for standalone execution
+        with open("parameters.json", "r") as f:
+            params = json.load(f)
         
         # Define problem class using parameters
         class MyProblem(Problem):
@@ -249,12 +283,12 @@ system_prompt: |-
     Brief description of the metaheuristic optimization problem.
 
     ## Mathematical Formulation
-    - **Objectives**: 
+    - **Objectives**:
         - f1: [description]
         - f2: [description]
-    - **Variables**: 
-        - x1: [description]
-        - x2: [description]
+    - **Variables**:
+        - x1: [description] (Type: continuous/integer/binary/permutation)
+        - x2: [description] (Type: continuous/integer/binary/permutation)
     - **Constraints**:
         - g1: [description]
         - g2: [description]
@@ -365,11 +399,7 @@ system_prompt: |-
     10. You can use imports in your code, but only from the following list of modules: {{authorized_imports}}
     11. The state persists between code executions: so if in one step you've created variables or imported modules, these will all persist.
     12. Use only standard ASCII characters (no Unicode arrows, smart quotes, or non-ASCII symbols).
-    13. To execute your code, never use `exec`, `subprocess`, or `os.system`. Instead, save it locally and then load it using:
-        ```py
-        solve_fn = load_object_from_python_file("model_file.py", "solve_model")
-        result = solve_fn()
-        ```<end_code>
+    13. Always solve optimization problems INLINE in your code blocks. Do not use `load_object_from_python_file` to execute solution.py, as it won't have access to agent tools. Never use `exec`, `subprocess`, or `os.system` either.
 
     On top of performing computations in the Python code snippets that you create, you have access to these tools:
     {%- for tool in tools.values() %}
