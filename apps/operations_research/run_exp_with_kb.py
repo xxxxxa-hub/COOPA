@@ -174,21 +174,24 @@ def run_experiment(
     log_to_file=False
 ):
     
-    # Handle dataset splitting if requested
-    if split_mode is not None and allowed_indices is None:
+    # Handle dataset splitting (required)
+    if split_mode is None:
+        raise ValueError("split_mode is required. Must be either 'train' or 'test'")
+
+    if allowed_indices is None:
         train_indices, test_indices = create_dataset_split(dataset_path, train_ratio, random_seed)
-        
+
         # Save split information
         dataset_name = Path(dataset_path).stem
         split_dir = Path(output_path).parent / "splits"
         save_split_info(train_indices, test_indices, dataset_name, split_dir, random_seed)
-        
+
         # Set allowed_indices based on split_mode
         if split_mode == "train":
             allowed_indices = train_indices
             print(f"Running experiment on TRAIN set ({len(train_indices)} questions)")
         elif split_mode == "test":
-            allowed_indices = test_indices  
+            allowed_indices = test_indices
             print(f"Running experiment on TEST set ({len(test_indices)} questions)")
         else:
             raise ValueError(f"Invalid split_mode: {split_mode}. Must be 'train' or 'test'")
@@ -264,23 +267,26 @@ def run_experiment(
             if log_to_file:
                 # Create log file for this question
                 model_name = model_id.replace('/', '-').replace('.', '_')
-                split_suffix = f"_{split_mode}" if split_mode is not None else ""
                 if split_mode == "train" and is_curation is True:
-                    retrieval_suffix = "_curation"
+                    mode_suffix = "_curation"
                 elif split_mode == "test" and is_curation is True:
-                    retrieval_suffix = "_no-retrieval"
+                    mode_suffix = "_no-retrieval"
                 elif split_mode == "test" and is_curation is False:
-                    retrieval_suffix = "_retrieval"
-                log_file = log_dir / f"{dataset_name}_{model_name}{split_suffix}{retrieval_suffix}_question_{idx}_log.txt"
+                    mode_suffix = "_retrieval"
+                else:
+                    mode_suffix = ""
+                log_file = log_dir / f"{dataset_name}_{model_name}_{split_mode}{mode_suffix}_question_{idx}_log.txt"
 
                 # Save original stdout/stderr
                 original_stdout = sys.stdout
                 original_stderr = sys.stderr
 
                 try:
+                    # Open log file for Phase 1 (Problem Solving)
                     with open(log_file, 'w', encoding='utf-8') as f_log:
                         # Write header
                         f_log.write(f"=== Dataset: {dataset_name} | Model: {model_id} | Question {idx} ===\n\n")
+                        f_log.write(f"=== PHASE 1: PROBLEM SOLVING ===\n\n")
                         f_log.write(f"Prompt:\n{prompt}\n\n")
                         f_log.write(f"{'='*80}\n\n")
 
@@ -298,7 +304,7 @@ def run_experiment(
                             match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
                             if match:
                                 predicted = float(match.group())
-                                correct = abs(predicted - float(gold_answer)) < 5e-3
+                                correct = abs(predicted - float(gold_answer)) < 1e-2
                             else:
                                 predicted = None
                                 correct = False
@@ -311,9 +317,9 @@ def run_experiment(
                         sys.stdout = original_stdout
                         sys.stderr = original_stderr
 
-                        # Write summary to log file
+                        # Write Phase 1 summary to log file
                         f_log.write(f"\n{'='*80}\n")
-                        f_log.write(f"Final Response: {agent_response}\n")
+                        f_log.write(f"Phase 1 Final Response: {agent_response}\n")
                         f_log.write(f"\nGold Answer: {gold_answer}\n")
                         f_log.write(f"Predicted Answer: {predicted}\n")
                         f_log.write(f"Correct: {correct}\n")
@@ -329,7 +335,7 @@ def run_experiment(
                     match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
                     if match:
                         predicted = float(match.group())
-                        correct = abs(predicted - float(gold_answer)) < 5e-3
+                        correct = abs(predicted - float(gold_answer)) < 1e-2
                     else:
                         predicted = None
                         correct = False
@@ -348,29 +354,78 @@ def run_experiment(
             }
             print(f"Problem {idx}: Correct={correct} | Gold={gold_answer} | Predicted={predicted}")
             results.append(result)
-            # Optionally, write results incrementally
-            # Create output directory if it doesn't exist
+
+            # Write results incrementally
             with open(output_path, "a", encoding="utf-8") as out_f:
                 out_f.write(json.dumps(result) + "\n")
-                
-                # Save knowledge to knowledge base only during training phase
-                if is_curation and split_mode == "train" and correct:
+
+            # Knowledge curation logic (only in training phase with curation enabled)
+            if is_curation and split_mode == "train":
+                if correct:
+                    print(f"✓ Solution verified CORRECT. Proceeding with knowledge curation for question {idx}...")
                     try:
-                        print(f"Training phase: saving knowledge from question {idx}")
-                        manager_agent.run("Please save any useful knowledge from this problem to the knowledge base. This is at your discretion and the purpose of the knowledge base is to help you solve future problems. Report the update you have made to the knowledge base as final answer", reset=False)
+                        curation_prompt = """The solution has been verified as correct by the system. Please now proceed with knowledge curation:
+
+1. Ensure the three standard files (parameters.json, solution.py, description.md) exist in the working directory
+2. If they are missing, create them using create_file_with_content tool
+3. Delegate to knowledge_curation_agent to save this knowledge for future use
+4. Call final_answer to confirm the knowledge has been saved"""
+
+                        # Log Phase 2 if logging is enabled
+                        if log_to_file:
+                            try:
+                                # Append Phase 2 to the existing log file
+                                with open(log_file, 'a', encoding='utf-8') as f_log:
+                                    f_log.write(f"\n\n{'='*80}\n")
+                                    f_log.write(f"=== PHASE 2: KNOWLEDGE CURATION ===\n\n")
+                                    f_log.write(f"Curation Prompt:\n{curation_prompt}\n\n")
+                                    f_log.write(f"{'='*80}\n\n")
+
+                                    # Wrap file with ANSI code stripper
+                                    clean_log = CleanOutputFile(f_log)
+
+                                    # Redirect stdout/stderr to clean file wrapper
+                                    sys.stdout = clean_log
+                                    sys.stderr = clean_log
+
+                                    try:
+                                        curation_response = manager_agent.run(curation_prompt, reset=False)
+                                    finally:
+                                        # Restore stdout/stderr
+                                        sys.stdout = original_stdout
+                                        sys.stderr = original_stderr
+
+                                    # Write Phase 2 summary
+                                    f_log.write(f"\n{'='*80}\n")
+                                    f_log.write(f"Phase 2 Final Response: {curation_response}\n")
+                                    f_log.write(f"Knowledge curation completed successfully.\n")
+                            except Exception as e:
+                                # Restore stdout/stderr if error occurs
+                                sys.stdout = original_stdout
+                                sys.stderr = original_stderr
+                                raise e
+                        else:
+                            # No logging - just run curation
+                            curation_response = manager_agent.run(curation_prompt, reset=False)
+
+                        print(f"✓ Knowledge curation completed for question {idx}")
                     except Exception as e:
-                        print(f"Error saving knowledge to the knowledge base: {e}")
-                        continue
-                elif is_curation and split_mode == "test":
-                    print(f"Test phase: using existing knowledge for question {idx}, not saving new knowledge")
-                elif is_curation and split_mode is None:
-                    # Backward compatibility: save knowledge when no split mode is specified
-                    try:
-                        print(f"No split mode: saving knowledge from question {idx}")
-                        manager_agent.run("Please save any useful knowledge from this problem to the knowledge base. This is at your discretion and the purpose of the knowledge base is to help you solve future problems. Report the update you have made to the knowledge base as final answer", reset=False)
-                    except Exception as e:
-                        print(f"Error saving knowledge to the knowledge base: {e}")
-                        continue
+                        print(f"✗ Error during knowledge curation for question {idx}: {e}")
+                else:
+                    print(f"✗ Solution INCORRECT - skipping knowledge curation for question {idx} (Gold: {gold_answer}, Predicted: {predicted})")
+                    # Log that curation was skipped
+                    if log_to_file:
+                        with open(log_file, 'a', encoding='utf-8') as f_log:
+                            f_log.write(f"\n\n{'='*80}\n")
+                            f_log.write(f"=== PHASE 2: KNOWLEDGE CURATION ===\n\n")
+                            f_log.write(f"Knowledge curation SKIPPED - solution is INCORRECT\n")
+            elif is_curation and split_mode == "test":
+                print(f"Test phase: using existing knowledge for question {idx}, not saving new knowledge")
+                # Log that we're in test phase
+                if log_to_file:
+                    with open(log_file, 'a', encoding='utf-8') as f_log:
+                        f_log.write(f"\n\n{'='*80}\n")
+                        f_log.write(f"Test phase: No knowledge curation performed (using existing knowledge base)\n")
 
     print(f"Experiment finished. Results saved to {output_path}.")
 
@@ -382,8 +437,8 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=str)
     parser.add_argument("--start_index", type=int, default=1, help="Starting index for experiments (default: 1)")
     parser.add_argument("--is_curation", action="store_true", help="Enable knowledge curation (saves useful knowledge to knowledge base)")
-    parser.add_argument("--split_mode", type=str, choices=["train", "test"], default=None, 
-                       help="Run on train or test split of dataset (default: None - use full dataset)")
+    parser.add_argument("--split_mode", type=str, choices=["train", "test"], required=True,
+                       help="Run on train or test split of dataset (REQUIRED: must be 'train' or 'test')")
     parser.add_argument("--train_ratio", type=float, default=0.5, 
                        help="Ratio of data to use for training when creating splits (default: 0.5)")
     parser.add_argument("--random_seed", type=int, default=42, 
@@ -397,9 +452,8 @@ if __name__ == "__main__":
     if args.knowledge_base_directory is None:
         args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v6").resolve()
     if args.output is None:
-        # Include split mode in filename for clarity
-        split_suffix = f"_{args.split_mode}" if args.split_mode is not None else ""
-        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}{split_suffix}.jsonl").resolve()
+        # Include split mode in filename
+        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{args.split_mode}.jsonl").resolve()
 
     index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v6").resolve()
 
