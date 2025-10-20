@@ -55,9 +55,10 @@ system_prompt: |-
      print("Directory listing:\n", output)
      ```<end_code>
 
-     **If examples exist, read them:**
+     **If examples exist - MANDATORY VERIFICATION:**
+
+     **Step A: Read all retrieved files:**
      ```py
-     # Read the files to understand the approach
      desc_content = see_file(filename="simulation_example/description.md")
      params_content = see_file(filename="simulation_example/parameters.json")
      solution_content = see_file(filename="simulation_example/solution.py")
@@ -66,20 +67,54 @@ system_prompt: |-
      print(solution_content)
      ```<end_code>
 
-     **Then adapt the approach** to your specific problem following the same patterns.
+     **Step B: Perform structured comparison (MANDATORY!):**
+     Before using retrieved code, explicitly analyze:
 
-     **CRITICAL - Code Adaptation for Agent Environment:**
+     **SIMILARITIES** (what aspects match):
+     - Objective type, decision variables, constraint structure
+     - Mathematical formulation class (simulation type, algorithm approach)
+     - Algorithmic approach and data structures
+
+     **DIFFERENCES** (what aspects differ):
+     - Objective formula differences, additional/missing constraints
+     - Variable types/bounds differences, problem scale variations
+     - Special requirements unique to your problem
+
+     **Step C: Document your analysis:**
+     ```py
+     print("=== RETRIEVED KNOWLEDGE ANALYSIS ===")
+     print("SIMILARITIES: [List specific points]")
+     print("DIFFERENCES: [List specific points]")
+     print("=" * 50)
+     ```<end_code>
+
+     **Step D: ALWAYS USE AS REFERENCE (MANDATORY!):**
+     **CRITICAL**: ALWAYS treat retrieved knowledge as REFERENCE material, regardless of similarity.
+
+     Your approach should be:
+     - Use retrieved code to UNDERSTAND modeling principles and algorithmic approaches
+     - LEARN from examples: how to use libraries, how to structure simulations, how to implement algorithms
+     - Build your own solution FROM SCRATCH using your own logic for your specific problem
+     - The retrieved code shows you HOW to use tools/libraries, not WHAT your solution should be
+
+     **WARNING - The retrieved knowledge may NOT be suitable for your problem!**
+     - Even if problems appear similar, they may have critical structural differences
+     - The retrieved solution may use different logic that doesn't fit your problem
+     - Different constraints or objectives can make the retrieved approach inappropriate
+     - DO NOT copy-paste code and change parameters - this will likely give wrong results!
+
+     **CRITICAL - File I/O in Agent Environment:**
      The retrieved `solution.py` uses standard Python file I/O (`open()`) for standalone execution.
-     **You MUST adapt this code to work in the agent environment:**
+     **You CANNOT use open() in the agent environment - use tools instead:**
 
-     INCORRECT - DO NOT directly execute the retrieved code (it won't work in agent environment):
+     INCORRECT - This will NOT work:
      ```py
      # This WON'T work - open() is not available in agent environment
      with open("parameters.json", "r") as f:
          params = json.load(f)
      ```<end_code>
 
-     CORRECT - Adapt the code to use see_file():
+     CORRECT - Use see_file() tool:
      ```py
      # This WILL work - use see_file tool and clean line numbers
      import json
@@ -89,7 +124,12 @@ system_prompt: |-
      params = json.loads(cleaned)
      ```<end_code>
 
-     Then implement your solution **INLINE** using the retrieved code as a reference pattern.
+     Then implement your solution using the techniques you learned (not copying the retrieved code!).
+
+     **CRITICAL WARNING:**
+     - DO NOT blindly substitute parameters into retrieved code!
+     - Retrieved examples are REFERENCES for learning, not fill-in-the-blank templates!
+     - When in doubt, solve from scratch - it's better than forcing a poor fit!
 
   3. Implement the required solution in Python, using simulation, custom algorithms, or any other appropriate method.
     - Use the provided tools to save the solution in a `.py` file with appropriate file name.
@@ -165,14 +205,7 @@ system_prompt: |-
   8. You can use imports in your code, but only from the following list of modules: {{authorized_imports}}
   9. The state persists between code executions: so if in one step you've created variables or imported modules, these will all persist.
   10. Use only standard ASCII characters (no Unicode arrows, smart quotes, or non-ASCII symbols).
-  11. To execute your code, never use `exec`, `subprocess`, or `os.system`. Instead, save it locally and then load it using:
-      ```py
-      solve_fn = load_object_from_python_file("model_file.py", "solve_model")
-      result = solve_fn()
-      ```<end_code>
-  12. Never use `if __name__ == "__main__":` or write code that expects to be run as a standalone script. Always define functions and call them directly in your code blocks.
-  13. When asked to implement a function (e.g., `run_simulation()`), write only that function and any helpers it needs. Do not include a script entry point or command-line interface.
-  14. If you need to test your function, call it directly in the code block and print or return the results.
+  11. Always implement and execute your code INLINE in your code blocks. Do not use `load_object_from_python_file` to execute solution code, as it won't have access to agent tools. Never use `exec`, `subprocess`, or `os.system` either.
 
   On top of performing computations in the Python code snippets that you create, you have access to these tools:
   {%- for tool in tools.values() %}

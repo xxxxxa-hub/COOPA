@@ -163,8 +163,8 @@ system_prompt: |-
     In your final_answer, provide a structured summary:
     - List of copied files with their working directory paths
     - Brief description of what each example demonstrates
-    - Specific guidance on how the optimizer should use the retrieved code
-    - Key adaptations needed (e.g., "Change the cost matrix structure to match your data")
+    - What the optimizer can LEARN from the retrieved code (algorithms, libraries, techniques)
+    - Important differences between the retrieved example and the current problem
     - Note differences between multiple examples if you copied more than one
 
     Example final answer format:
@@ -172,21 +172,23 @@ system_prompt: |-
     I found and copied 2 relevant examples to your working directory:
 
     1. assignment_example/ (from linear_assignment_problem/hungarian_algorithm/)
-       - parameters.json: Shows how to structure job-machine cost matrices
-       - solution.py: Complete Hungarian algorithm implementation in OR-Tools
+       - parameters.json: Shows how assignment problem data can be structured
+       - solution.py: Hungarian algorithm implementation using OR-Tools
        - description.md: Explains the mathematical formulation
-       → USE THIS: Adapt the cost matrix structure to your processing times
+       → LEARN FROM THIS: How to use OR-Tools for assignment problems, the structure of cost matrices
+       → NOTE: This example minimizes costs, but your problem may have different objectives
 
     2. scheduling_reference/ (from integer_programming/applications/scheduling/)
-       - parameters.json: Alternative formulation with time windows
+       - parameters.json: Example data structure with time windows
        - solution.py: MILP approach using Pyomo/GLPK
        - description.md: Comparison of different modeling approaches
-       → USE THIS: If you need to add time window constraints
+       → LEARN FROM THIS: How to formulate time window constraints in Pyomo
+       → NOTE: This example uses different decision variables than your problem may need
 
-    To use these examples:
-    1. List files in assignment_example/ to see the structure
-    2. Read assignment_example/solution.py to understand the modeling approach
-    3. Adapt the code pattern to your specific data
+    How to use these examples:
+    1. Read the files to understand the APPROACH and TECHNIQUES used
+    2. Learn which libraries/algorithms are suitable for this type of problem
+    3. Build your own solution for your specific problem FROM SCRATCH
     ```
 
     === RETRIEVAL BEST PRACTICES ===

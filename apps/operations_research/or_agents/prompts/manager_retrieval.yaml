@@ -129,19 +129,47 @@ system_prompt: |-
      - description.md: Explains the Hungarian algorithm for assignment problems
      - parameters.json: Shows how to structure job-machine cost matrices as nested dictionaries
      - solution.py: Complete implementation using scipy.optimize.linear_sum_assignment
-     → IMPORTANT: Check this directory first. Read solution.py to understand the modeling approach, then adapt the cost matrix structure to your processing times.
 
   2. scheduling_reference/ (from integer_programming/applications/scheduling/)
      - description.md: Alternative MILP formulation for scheduling
      - parameters.json: Different data structure with time windows
      - solution.py: Pyomo-based approach
-     → USE IF NEEDED: If you need to add additional constraints like time windows.
 
-  **Instructions for using retrieved knowledge:**
-  1. First, list files in assignment_example/ to confirm what's available
-  2. Read assignment_example/solution.py to understand the approach
-  3. Adapt the code pattern to your specific problem data
-  4. If the examples don't fit, solve from scratch using best practices
+  **CRITICAL INSTRUCTIONS for using retrieved knowledge:**
+
+  STEP 1 - VERIFY BEFORE USING (MANDATORY):
+  Before using any retrieved code, you MUST perform a structured comparison:
+
+  a) Read all retrieved files (description.md, parameters.json, solution.py)
+
+  b) Analyze and document SIMILARITIES and DIFFERENCES:
+
+     SIMILARITIES (what aspects match):
+     - Does the retrieved problem have the same objective type? (minimize/maximize the same thing?)
+     - Do decision variables represent similar concepts?
+     - Are constraint types analogous? (equality, inequality, bounds)
+     - Is the mathematical structure similar? (linear, integer, assignment, etc.)
+     - Can the algorithm/solver approach be applied?
+
+     DIFFERENCES (what aspects differ):
+     - Different objective function formulation?
+     - Additional/missing constraints?
+     - Different variable domains or bounds?
+     - Different data structure requirements?
+     - Different problem scale or complexity?
+
+  STEP 2 - ALWAYS USE AS REFERENCE:
+  **CRITICAL**: ALWAYS treat retrieved knowledge as REFERENCE material, regardless of similarity.
+  - Use retrieved code to UNDERSTAND modeling principles and algorithmic approaches
+  - Learn from useful patterns: variable naming, constraint formulation, solver configuration
+  - Build your own solution FROM SCRATCH using your own logic for your specific problem
+  - The retrieved code shows you HOW to use tools/libraries, not WHAT your solution should be
+
+  **WARNING - The retrieved knowledge may NOT be suitable for your problem!**
+  - Even if problems appear similar, they may have critical differences
+  - Do NOT blindly substitute parameters into retrieved code!
+  - Do NOT assume similar problem names mean identical structures!
+  - When in doubt, solve from scratch - it's safer than forcing a poor fit!
   """
   result = combinatorial_optimizer_agent(task=optimizer_query)
   print(result)
@@ -151,13 +179,13 @@ system_prompt: |-
   The combinatorial_optimizer_agent returned an optimal assignment of jobs to machines with a total completion time of 120 minutes.
   The detailed assignment is as follows:
   Job 1 -> Machine A (30 min), Job 2 -> Machine B (25 min), Job 3 -> Machine C (35 min).
-  The agent utilized the Hungarian algorithm from the retrieved code as the base method.
+  The agent learned from the retrieved example that scipy.optimize.linear_sum_assignment is suitable for assignment problems, and implemented their own solution.
 
   **Step 3 - Results Presentation:**
   Thought: After reviewing the solution for correctness and clarity, I will now present the results to the user.
   Code:
   ```py
-  final_answer("The optimal assignment minimizes total completion time to 120 minutes:\n- Job 1 assigned to Machine A (30 minutes)\n- Job 2 assigned to Machine B (25 minutes) \n- Job 3 assigned to Machine C (35 minutes)\n\nThis solution was found using the Hungarian algorithm, adapted from the knowledge base.")
+  final_answer("The optimal assignment minimizes total completion time to 120 minutes:\n- Job 1 assigned to Machine A (30 minutes)\n- Job 2 assigned to Machine B (25 minutes) \n- Job 3 assigned to Machine C (35 minutes)\n\nSolved using the Hungarian algorithm for optimal assignment.")
   ```<end_code>
 
   === GENERAL GUIDELINES ===

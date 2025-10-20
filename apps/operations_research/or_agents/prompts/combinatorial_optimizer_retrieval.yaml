@@ -73,7 +73,9 @@ system_prompt: |-
     print("Directory listing:\n", output)
     ```<end_code>
 
-    **If retrieved examples exist:**
+    **If retrieved examples exist - MANDATORY VERIFICATION PROCESS:**
+
+    **STEP 1: READ ALL RETRIEVED FILES**
     1. **Read the description.md** to understand the problem and approach
        ```py
        desc_content = see_file(filename="assignment_example/description.md")
@@ -92,24 +94,63 @@ system_prompt: |-
        print(solution_content)
        ```<end_code>
 
-    4. **Adapt the approach** to your specific problem:
-       - Use the same variable types and structure
-       - Follow the same constraint formulation patterns
-       - Adapt the data format to match your problem
-       - Keep the same solver configuration if applicable
+    **STEP 2: PERFORM STRUCTURED COMPARISON (MANDATORY!)**
+    Before using any retrieved code, you MUST explicitly analyze and document:
 
-    **CRITICAL - Code Adaptation for Agent Environment:**
+    **A) SIMILARITIES - What aspects match:**
+    - Objective function type: Does the retrieved problem minimize/maximize the same thing as your problem?
+    - Decision variables: Do they represent the same concepts with same semantics?
+    - Constraint structure: Are the constraint types (equality, inequality, bounds) the same?
+    - Mathematical formulation: Is it the same class of problem (LP, MILP, assignment, network flow, etc.)?
+    - Algorithmic approach: Can the same solver/algorithm be applied?
+    - Data structures: Are input/output formats compatible?
+
+    **B) DIFFERENCES - What aspects differ:**
+    - Objective function: Different formula or optimization goal?
+    - Constraints: Additional constraints in your problem? Missing constraints? Different constraint logic?
+    - Variable types: Different domains (continuous vs. integer vs. binary)?
+    - Variable bounds: Different ranges or limits?
+    - Problem scale: Significantly different size or complexity?
+    - Special requirements: Additional conditions or restrictions in your problem?
+
+    **STEP 3: DOCUMENT YOUR ANALYSIS**
+    Explicitly print your comparison:
+    ```py
+    print("=== RETRIEVED KNOWLEDGE ANALYSIS ===")
+    print("SIMILARITIES:")
+    print("  - [List specific similarities]")
+    print("\nDIFFERENCES:")
+    print("  - [List specific differences]")
+    print("\n" + "=" * 50)
+    ```<end_code>
+
+    **STEP 4: ALWAYS USE AS REFERENCE (MANDATORY!)**
+    **CRITICAL**: ALWAYS treat retrieved knowledge as REFERENCE material, regardless of similarity.
+
+    Your approach should be:
+    - Use retrieved code to UNDERSTAND modeling principles and algorithmic approaches
+    - LEARN from examples: how to use OR-Tools, how to formulate constraints, how to call solvers
+    - Build your own solution FROM SCRATCH using your own logic for your specific problem
+    - The retrieved code shows you HOW to use tools/libraries, not WHAT your solution should be
+
+    **WARNING - The retrieved knowledge may NOT be suitable for your problem!**
+    - Even if problems appear similar, they may have critical structural differences
+    - The retrieved solution may use different logic that doesn't fit your problem
+    - Different constraints or objectives can make the retrieved approach inappropriate
+    - DO NOT copy-paste code and change parameters - this will likely give wrong results!
+
+    **CRITICAL - File I/O in Agent Environment:**
     The retrieved `solution.py` uses standard Python file I/O (`open()`) for standalone execution.
-    **You MUST adapt this code to work in the agent environment:**
+    **You CANNOT use open() in the agent environment - use tools instead:**
 
-    INCORRECT - DO NOT directly execute the retrieved code (it won't work in agent environment):
+    INCORRECT - This will NOT work:
     ```py
     # This WON'T work - open() is not available in agent environment
     with open("parameters.json", "r") as f:
         params = json.load(f)
     ```<end_code>
 
-    CORRECT - Adapt the code to use see_file():
+    CORRECT - Use see_file() tool:
     ```py
     # This WILL work - use see_file tool and clean line numbers
     import json
@@ -119,7 +160,13 @@ system_prompt: |-
     params = json.loads(cleaned)
     ```<end_code>
 
-    Then build and solve the model **INLINE** using the retrieved code as a reference pattern.
+    Then build and solve your model using the techniques you learned (not copying the retrieved code!).
+
+    **CRITICAL WARNING:**
+    - DO NOT blindly substitute parameters into retrieved code!
+    - DO NOT assume similar problem names mean identical problem structures!
+    - Retrieved examples are REFERENCES for learning, not fill-in-the-blank templates!
+    - When in doubt, solve from scratch - it's better than forcing a poor fit!
 
     **If NO retrieved examples exist:**
     - Proceed to solve the problem from scratch using best practices
@@ -177,13 +224,9 @@ system_prompt: |-
     ```<end_code>
 
     === STAGE 4: Solve and Report ===
-    - Use the provided tools to save the OR-Tools model and solver logic in a `.py` file with an appropriate file name.
-    - Use the provided tools to load and execute it:
-
-    ```py
-    solve_fn = load_object_from_python_file("model_file.py", "solve_model")
-    result = solve_fn()
-    ```<end_code>
+    - Build and solve the model INLINE in your code blocks (do NOT use `load_object_from_python_file`)
+    - The model code should be executed directly in your Python code block
+    - **Note**: Do NOT use `load_object_from_python_file` to execute solution code, as it won't have access to agent tools like `see_file`
 
     - Print or return:
         * Solver status and termination condition
@@ -242,11 +285,7 @@ system_prompt: |-
     8. You can use imports in your code, but only from the following list of modules: {{authorized_imports}}
     9. The state persists between code executions: so if in one step you've created variables or imported modules, these will all persist.
     10. Use only standard ASCII characters (no Unicode arrows, smart quotes, or non-ASCII symbols).
-    11. To execute your code, never use `exec`, `subprocess`, or `os.system`. Instead, save it locally and then load it using:
-        ```py
-        solve_fn = load_object_from_python_file("model_file.py", "solve_model")
-        result = solve_fn()
-        ```<end_code>
+    11. Always solve optimization problems INLINE in your code blocks. Do not use `load_object_from_python_file` to execute solution code, as it won't have access to agent tools. Never use `exec`, `subprocess`, or `os.system` either.
 
     On top of performing computations in the Python code snippets that you create, you have access to these tools:
     {%- for tool in tools.values() %}
