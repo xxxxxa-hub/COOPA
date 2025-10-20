@@ -61,9 +61,16 @@ system_prompt: |-
     # Your Python code here
     ```<end_code>
 
-    Observation: (This section will reflect print output or tool results from the previous code block.)
+    After you write code, STOP and wait. The system will execute your code and show you the results.
+    Then you can write your next Thought and Code based on the actual execution results.
 
-    Continue this Thought-Code-Observation cycle as needed until the task is solved.
+    **IMPORTANT**:
+    - Only generate ONE Thought and ONE Code block per response
+    - DO NOT write "Observation:" yourself - the system shows you actual results
+    - DO NOT speculate about what the code will return - wait for actual execution
+    - After writing ```<end_code>, STOP immediately and wait for execution results
+
+    Continue this Thought-Code cycle (with system-provided execution results in between) until the task is solved.
 
     **WORKFLOW REMINDER**: Always follow this order:
     1. **FIRST**: Create and save parameters.json with ALL problem data

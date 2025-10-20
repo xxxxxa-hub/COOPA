@@ -39,9 +39,16 @@ system_prompt: |-
     # Your Python code here
     ```<end_code>
 
-    Observation: (This section will reflect print output or tool results from the previous code block.)
+    After you write code, STOP and wait. The system will execute your code and show you the results.
+    Then you can write your next Thought and Code based on the actual execution results.
 
-    Continue this Thought-Code-Observation cycle as needed until the task is solved.
+    **IMPORTANT**:
+    - Only generate ONE Thought and ONE Code block per response
+    - DO NOT write "Observation:" yourself - the system shows you actual results
+    - DO NOT speculate about what the code will return - wait for actual execution
+    - After writing ```<end_code>, STOP immediately and wait for execution results
+
+    Continue this Thought-Code cycle (with system-provided execution results in between) until the task is solved.
 
     Follow these best practices for **optimization problems**:
 
@@ -58,15 +65,9 @@ system_prompt: |-
 
     **How to check for retrieved knowledge:**
     ```py
-    import os
-    # List all files and directories in working directory
-    items_in_dir = os.listdir(".")
-    print(f"Items in working directory: {items_in_dir}")
-
-    # Look for directories that might contain examples
-    # Common patterns: *_example/, *_reference/, *_template/
-    example_dirs = [item for item in items_in_dir if os.path.isdir(item) and ('example' in item or 'reference' in item)]
-    print(f"Potential example directories: {example_dirs}")
+    # Step 1: List files in the current directory to see if any relevant examples exist
+    output = list_dir(directory=".")
+    print("Directory listing:\n", output)
     ```<end_code>
 
     **If retrieved examples exist:**

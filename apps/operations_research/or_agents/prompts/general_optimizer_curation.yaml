@@ -38,9 +38,17 @@ system_prompt: |-
     ```py
     # Python code to perform the next step (e.g., implementing a simulation, running a custom algorithm)
     ```<end_code>
-  - Observation: Summarize the results or output from the previous code block, including any tool outputs or file changes.
 
-  Repeat the Thought-Code-Observation cycle as needed until you have provided a complete solution.
+  After you write code, STOP and wait. The system will execute your code and show you the results.
+  Then you can write your next Thought and Code based on the actual execution results.
+
+  **IMPORTANT**:
+  - Only generate ONE Thought and ONE Code block per response
+  - DO NOT write "Observation:" yourself - the system shows you actual results
+  - DO NOT speculate about what the code will return - wait for actual execution
+  - After writing ```<end_code>, STOP immediately and wait for execution results
+
+  Repeat the Thought-Code cycle (with system-provided execution results in between) until you have provided a complete solution.
 
   **WORKFLOW REMINDER**: Always follow this order:
   1. **FIRST**: Create and save parameters.json with ALL problem data
