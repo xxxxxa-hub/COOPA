@@ -87,28 +87,32 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
         model_id=model_id,
         managed_agents=managed_agents,
         working_directory=working_directory,
-        verbosity_level=LogLevel.DEBUG
+        verbosity_level=LogLevel.DEBUG,
+        is_curation=is_curation
     )
     # Create the combinatorial optimizer agent
     combinatorial_optimizer_agent = create_combinatorial_optimizer_agent(
         model_id=model_id,
         managed_agents=managed_agents,
         working_directory=working_directory,
-        verbosity_level=LogLevel.DEBUG
+        verbosity_level=LogLevel.DEBUG,
+        is_curation=is_curation
     )
     # Create the metaheuristic optimizer agent
     metaheuristic_optimizer_agent = create_metaheuristic_optimizer_agent(
         model_id=model_id,
         managed_agents=managed_agents,
         working_directory=working_directory,
-        verbosity_level=LogLevel.DEBUG
+        verbosity_level=LogLevel.DEBUG,
+        is_curation=is_curation
     )
     # Create the general optimizer agent
     general_optimizer_agent = create_general_optimizer_agent(
         model_id=model_id,
         managed_agents=managed_agents,
         working_directory=working_directory,
-        verbosity_level=LogLevel.DEBUG
+        verbosity_level=LogLevel.DEBUG,
+        is_curation=is_curation
     )
 
     # Load the prompt template
