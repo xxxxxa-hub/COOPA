@@ -32,7 +32,35 @@ system_prompt: |-
 
   === PROCEDURE ===
   1. Carefully interpret the problem description and any additional knowledge provided.
-  2. If relevant, retrieve code examples or documentation from the knowledge base.
+
+  2. **CHECK FOR RETRIEVED KNOWLEDGE (CRITICAL!):**
+     Before solving from scratch, check if the knowledge_retrieval_agent provided reference implementations.
+     The manager agent may have retrieved relevant examples to help you.
+
+     **How to check:**
+     ```py
+     import os
+     items_in_dir = os.listdir(".")
+     print(f"Items in working directory: {items_in_dir}")
+
+     # Look for example directories
+     example_dirs = [item for item in items_in_dir if os.path.isdir(item) and ('example' in item or 'reference' in item)]
+     print(f"Potential example directories: {example_dirs}")
+     ```<end_code>
+
+     **If examples exist, read them:**
+     ```py
+     # Read the files to understand the approach
+     desc_content = see_file(filename="simulation_example/description.md")
+     params_content = see_file(filename="simulation_example/parameters.json")
+     solution_content = see_file(filename="simulation_example/solution.py")
+     print(desc_content)
+     print(params_content)
+     print(solution_content)
+     ```<end_code>
+
+     **Then adapt the approach** to your specific problem following the same patterns.
+
   3. Implement the required solution in Python, using simulation, custom algorithms, or any other appropriate method.
     - Use the provided tools to save the solution in a `.py` file with appropriate file name.
       (Correct)

@@ -135,28 +135,29 @@ system_prompt: |-
   }"""
 
   # 2. Create solution.py
-  solve_py = '''import json
-from scipy.optimize import linear_sum_assignment
-import numpy as np
+  solve_py = """import json
+  from scipy.optimize import linear_sum_assignment
+  import numpy as np
 
-with open('parameters.json') as f:
-    data = json.load(f)
+  # Read parameters using see_file tool instead of open()
+  params_content = see_file(filename="parameters.json")
+  data = json.loads(params_content)
 
-jobs = data['jobs']
-machines = data['machines']
-times = data['processing_times']
+  jobs = data["jobs"]
+  machines = data["machines"]
+  times = data["processing_times"]
 
-# Create cost matrix
-cost_matrix = np.array([[times[j][m] for m in machines] for j in jobs])
+  # Create cost matrix
+  cost_matrix = np.array([[times[j][m] for m in machines] for j in jobs])
 
-# Solve assignment problem
-row_ind, col_ind = linear_sum_assignment(cost_matrix)
+  # Solve assignment problem
+  row_ind, col_ind = linear_sum_assignment(cost_matrix)
 
-total_time = cost_matrix[row_ind, col_ind].sum()
-print(f"Total completion time: {total_time} minutes")
-for i, j in zip(row_ind, col_ind):
-    print(f"{jobs[i]} -> {machines[j]} ({cost_matrix[i,j]} min)")
-'''
+  total_time = cost_matrix[row_ind, col_ind].sum()
+  print(f"Total completion time: {total_time} minutes")
+  for i, j in zip(row_ind, col_ind):
+      print(f"{jobs[i]} -> {machines[j]} ({cost_matrix[i,j]} min)")
+  """
 
   # 3. Create description.md
   desc_md = """# Job-Machine Assignment Problem

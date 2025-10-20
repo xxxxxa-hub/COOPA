@@ -115,7 +115,7 @@ system_prompt: |-
   - scheduling_models.py: Mathematical models for job scheduling with different objectives
 
   **Step 2 - Problem Delegation:**
-  Thought: I will now delegate the problem to the combinatorial_optimizer_agent, providing both the problem description and the retrieved knowledge.
+  Thought: I will now delegate the problem to the combinatorial_optimizer_agent, providing both the problem description and guidance on the retrieved knowledge.
   Code:
   ```py
   optimizer_query = """
@@ -123,15 +123,25 @@ system_prompt: |-
   Find the optimal assignment of jobs to machines to minimize total completion time, given the following processing times...
 
   ==== additional knowledge ====
-  - Retrieved from knowledge base: 'assignment_solver.py' (Hungarian algorithm implementation)
-    Summary: Hungarian algorithm for optimal assignment with cost minimization. Can be adapted for completion time minimization.
-    File path: working_directory/assignment_solver.py
+  The knowledge_retrieval_agent has copied the following examples to your working directory:
 
-  - Retrieved from knowledge base: 'scheduling_models.py' (various scheduling formulations)
-    Summary: Mathematical models for job scheduling with different objectives including completion time minimization.
-    File path: working_directory/scheduling_models.py
+  1. assignment_example/ (from linear_assignment_problem/hungarian_algorithm/)
+     - description.md: Explains the Hungarian algorithm for assignment problems
+     - parameters.json: Shows how to structure job-machine cost matrices as nested dictionaries
+     - solution.py: Complete implementation using scipy.optimize.linear_sum_assignment
+     → IMPORTANT: Check this directory first. Read solution.py to understand the modeling approach, then adapt the cost matrix structure to your processing times.
 
-  These resources provide both algorithmic approaches and mathematical formulations that can be adapted for your specific problem instance.
+  2. scheduling_reference/ (from integer_programming/applications/scheduling/)
+     - description.md: Alternative MILP formulation for scheduling
+     - parameters.json: Different data structure with time windows
+     - solution.py: Pyomo-based approach
+     → USE IF NEEDED: If you need to add additional constraints like time windows.
+
+  **Instructions for using retrieved knowledge:**
+  1. First, list files in assignment_example/ to confirm what's available
+  2. Read assignment_example/solution.py to understand the approach
+  3. Adapt the code pattern to your specific problem data
+  4. If the examples don't fit, solve from scratch using best practices
   """
   result = combinatorial_optimizer_agent(task=optimizer_query)
   print(result)
