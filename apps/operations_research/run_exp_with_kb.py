@@ -265,7 +265,12 @@ def run_experiment(
                 # Create log file for this question
                 model_name = model_id.replace('/', '-').replace('.', '_')
                 split_suffix = f"_{split_mode}" if split_mode is not None else ""
-                retrieval_suffix = "_retrieval" if is_curation else "_no-retrieval"
+                if split_mode == "train" and is_curation is True:
+                    retrieval_suffix = "_curation"
+                elif split_mode == "test" and is_curation is True:
+                    retrieval_suffix = "_no-retrieval"
+                elif split_mode == "test" and is_curation is False:
+                    retrieval_suffix = "_retrieval"
                 log_file = log_dir / f"{dataset_name}_{model_name}{split_suffix}{retrieval_suffix}_question_{idx}_log.txt"
 
                 # Save original stdout/stderr
@@ -390,13 +395,13 @@ if __name__ == "__main__":
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v5").resolve()
+        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v6").resolve()
     if args.output is None:
         # Include split mode in filename for clarity
         split_suffix = f"_{args.split_mode}" if args.split_mode is not None else ""
         args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}{split_suffix}.jsonl").resolve()
 
-    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v5").resolve()
+    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v6").resolve()
 
     run_experiment(
         dataset_path=f"apps/operations_research/datasets/{args.dataset}/{args.dataset}.jsonl",
