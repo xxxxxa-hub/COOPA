@@ -414,7 +414,10 @@ system_prompt: |-
         <filename_2>: <brief description of what the file contains>
         ...
 
-    Example:
+    **Example:**
+
+    Thought: All three required files have been validated successfully. Now I will call final_answer with the complete solution summary.
+    Code:
     ```py
     final_answer("""  
     Status: optimal  
@@ -600,7 +603,13 @@ managed_agent:
       Task:
       {{task}}
       ---
-      Proceed as you normally would — using Thought, Code, Observation — and when ready, respond using the `final_answer` tool with all required components (summary, details, context).
+      Proceed as you normally would — using Thought, Code — and when ready, respond using the `final_answer` tool with all required components (summary, details, context).
+
+      **IMPORTANT**:
+      - DO NOT write "Observation:" yourself - the system shows you actual results
+      - After writing ```<end_code>, STOP and wait for system execution results
+      - Only generate ONE Thought and ONE Code block per response
+      
       Even if incomplete, return as much useful insight as possible.
   report: |-
       Here is the final answer from your managed agent '{{name}}':

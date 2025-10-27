@@ -141,7 +141,10 @@ system_prompt: |-
     3. Solve with the appropriate solver
     4. Extract and report results
 
-    Example:
+    **Example:**
+
+    Thought: I have already created parameters.json with all problem data. Now I will read it, build the OR-Tools model, solve it, and extract the results.
+    Code:
     ```py
     import json
     import re
@@ -164,6 +167,10 @@ system_prompt: |-
     print(f"Objective: {solution.ObjectiveValue()}")
     # ... print routes and other details ...
     ```<end_code>
+
+    [System executes code and shows:]
+    Objective: 2500
+    Route for vehicle 0: 0 -> 3 -> 2 -> 1 -> 0
 
     **Note**: Do NOT use `load_object_from_python_file` to execute solution.py, as it won't have access to agent tools like `see_file`.
 
@@ -209,24 +216,24 @@ system_prompt: |-
         # This uses standard Python file I/O for standalone execution
         with open("parameters.json", "r") as f:
             params = json.load(f)
-        
+
         # Create routing model using parameters
         manager = pywrapcp.RoutingIndexManager(
-            params["data"]["num_customers"], 
-            params["data"]["num_vehicles"], 
+            params["data"]["num_customers"],
+            params["data"]["num_vehicles"],
             0
         )
         routing = pywrapcp.RoutingModel(manager)
-        
+
         # Define distance callback
         def distance_callback(from_index, to_index):
             from_node = manager.IndexToNode(from_index)
             to_node = manager.IndexToNode(to_index)
             return params["data"]["distances"][from_node][to_node]
-        
+
         transit_callback_index = routing.RegisterTransitCallback(distance_callback)
         routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
-        
+
         # Add capacity constraints
         demand_callback_index = routing.RegisterUnaryTransitCallback(
             lambda from_index: params["data"]["demands"][manager.IndexToNode(from_index)]
@@ -238,21 +245,21 @@ system_prompt: |-
             True,  # start cumul to zero
             'Capacity'
         )
-        
+
         # Solve
         search_parameters = pywrapcp.DefaultRoutingSearchParameters()
         search_parameters.first_solution_strategy = (
             routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
         )
         solution = routing.SolveWithParameters(search_parameters)
-        
+
         # Return results
         return {
             "status": "optimal" if solution else "infeasible",
             "objective": routing.ObjectiveValue(solution) if solution else None,
             "routes": extract_routes(routing, manager, solution) if solution else None
         }
-    
+
     def extract_routes(routing, manager, solution):
         routes = []
         for vehicle_id in range(routing.vehicles()):
@@ -264,7 +271,7 @@ system_prompt: |-
             route.append(manager.IndexToNode(index))
             routes.append(route)
         return routes
-    
+
     if __name__ == "__main__":
         result = solve_problem()
         print(f"Status: {result['status']}")
@@ -538,7 +545,13 @@ managed_agent:
       Task:
       {{task}}
       ---
-      Proceed as you normally would — using Thought, Code, Observation — and when ready, respond using the `final_answer` tool with all required components (summary, details, context).
+      Proceed as you normally would — using Thought, Code — and when ready, respond using the `final_answer` tool with all required components (summary, details, context).
+
+      **IMPORTANT**:
+      - DO NOT write "Observation:" yourself - the system shows you actual results
+      - After writing ```<end_code>, STOP and wait for system execution results
+      - Only generate ONE Thought and ONE Code block per response
+
       Even if incomplete, return as much useful insight as possible.
   report: |-
       Here is the final answer from your managed agent '{{name}}':

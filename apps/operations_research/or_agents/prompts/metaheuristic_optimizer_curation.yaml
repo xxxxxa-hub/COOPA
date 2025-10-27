@@ -132,7 +132,10 @@ system_prompt: |-
     3. Run the algorithm with the appropriate settings
     4. Extract and report results
 
-    Example:
+    **Example:**
+
+    Thought: I have already created parameters.json with all problem data. Now I will read it, build the pymoo problem class, run the algorithm, and extract the results.
+    Code:
     ```py
     import json
     import re
@@ -161,6 +164,10 @@ system_prompt: |-
     print(f"Best solutions: {result.X}")
     print(f"Objective values: {result.F}")
     ```<end_code>
+
+    [System executes code and shows:]
+    Best solutions: [[0.5, 1.2, 0.0]]
+    Objective values: [[0.025, 0.980]]
 
     **Note**: Do NOT use `load_object_from_python_file` to execute solution.py, as it won't have access to agent tools like `see_file`.
 
@@ -215,7 +222,7 @@ system_prompt: |-
         # This uses standard Python file I/O for standalone execution
         with open("parameters.json", "r") as f:
             params = json.load(f)
-        
+
         # Define problem class using parameters
         class MyProblem(Problem):
             def __init__(self, params):
@@ -227,21 +234,21 @@ system_prompt: |-
                     xu=np.array([params["variables"][f"x{i+1}"]["bounds"][1] for i in range(params["data"]["num_variables"])])
                 )
                 self.params = params
-            
+
             def _evaluate(self, x, out, *args, **kwargs):
                 # Define objectives and constraints based on parameters
                 f1 = x[:, 0]**2 + x[:, 1]**2
                 f2 = (x[:, 0] - 1)**2 + (x[:, 1] - 1)**2
-                
+
                 g1 = x[:, 0] + x[:, 1] - 1.5
                 g2 = -x[:, 0] - x[:, 1] + 0.5
-                
+
                 out["F"] = np.column_stack([f1, f2])
                 out["G"] = np.column_stack([g1, g2])
-        
+
         # Create problem instance
         problem = MyProblem(params)
-        
+
         # Create algorithm using parameters
         algorithm = NSGA2(
             pop_size=params["algorithm"]["population_size"],
@@ -250,13 +257,13 @@ system_prompt: |-
             mutation=get_mutation("real_pm", prob=params["algorithm"]["mutation_prob"]),
             eliminate_duplicates=True
         )
-        
+
         # Set termination
         termination = get_termination("n_gen", params["algorithm"]["generations"])
-        
+
         # Solve
         res = minimize(problem, algorithm, termination, seed=1, verbose=True)
-        
+
         # Return results
         return {
             "status": "optimal" if res.success else "failed",
@@ -264,7 +271,7 @@ system_prompt: |-
             "variables": res.X[0] if len(res.X) > 0 else None,
             "pareto_front": res.F if len(res.F) > 0 else None
         }
-    
+
     if __name__ == "__main__":
         result = solve_problem()
         print(f"Status: {result['status']}")
@@ -544,7 +551,13 @@ managed_agent:
       Task:
       {{task}}
       ---
-      Proceed as you normally would — using Thought, Code, Observation — and when ready, respond using the `final_answer` tool with all required components (summary, details, context).
+      Proceed as you normally would — using Thought, Code — and when ready, respond using the `final_answer` tool with all required components (summary, details, context).
+
+      **IMPORTANT**:
+      - DO NOT write "Observation:" yourself - the system shows you actual results
+      - After writing ```<end_code>, STOP and wait for system execution results
+      - Only generate ONE Thought and ONE Code block per response
+
       Even if incomplete, return as much useful insight as possible.
   report: |-
       Here is the final answer from your managed agent '{{name}}':

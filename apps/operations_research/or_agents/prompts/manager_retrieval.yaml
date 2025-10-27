@@ -137,6 +137,13 @@ system_prompt: |-
 
   **CRITICAL INSTRUCTIONS for using retrieved knowledge:**
 
+  **FORBIDDEN - DO NOT pass specific problem details from retrieved files:**
+  - DO NOT pass objectives from retrieved files to optimizer agents
+  - DO NOT pass constraints from retrieved files to optimizer agents
+  - DO NOT pass parameters, data structures, or variable definitions from retrieved files
+  - The retrieved files are from DIFFERENT problems - their specific details will lead to WRONG solutions
+  - Only pass file paths and brief descriptions of what each file contains (e.g., "Hungarian algorithm implementation", "MILP scheduling formulation")
+
   STEP 1 - VERIFY BEFORE USING (MANDATORY):
   Before using any retrieved code, you MUST perform a structured comparison:
 
@@ -329,7 +336,13 @@ managed_agent:
       Task:
       {{task}}
       ---
-      Proceed as you normally would — using Thought, Code, Observation — and when ready, respond using the `final_answer` tool with all required components (summary, details, context).
+      Proceed as you normally would — using Thought, Code — and when ready, respond using the `final_answer` tool with all required components (summary, details, context).
+
+      **IMPORTANT**:
+      - DO NOT write "Observation:" yourself - the system shows you actual results
+      - After writing ```<end_code>, STOP and wait for system execution results
+      - Only generate ONE Thought and ONE Code block per response
+
       Even if incomplete, return as much useful insight as possible.
   report: |-
       Here is the final answer from your managed agent '{{name}}':
