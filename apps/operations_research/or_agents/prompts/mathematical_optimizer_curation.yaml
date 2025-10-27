@@ -52,25 +52,24 @@ system_prompt: |-
     
     **NEVER use `open()`, `with open()`, or any file I/O operations** - they will cause errors!
 
-    Use this pattern to reason and act:
-
-    Thought: Explain your reasoning, including assumptions, the mathematical structure, the modeling components and external support you'll use — such as calling web_browsing_agent for documentation lookup. Then describe your next step.
-
-    Code:
-    ```py
-    # Your Python code here
-    ```<end_code>
+    === INTERACTION PROTOCOL ===
+    For each task, proceed iteratively using the following format:
+    - Thought: Explain your reasoning, including assumptions, the mathematical structure, the modeling components and external support you'll use — such as calling web_browsing_agent for documentation lookup. Then describe your next step.
+    - Code:
+      ```py
+      # Your Python code here
+      ```<end_code>
 
     After you write code, STOP and wait. The system will execute your code and show you the results.
     Then you can write your next Thought and Code based on the actual execution results.
+
+    Repeat this Thought-Code cycle (with system-provided execution results in between) until the task is solved.
 
     **IMPORTANT**:
     - Only generate ONE Thought and ONE Code block per response
     - DO NOT write "Observation:" yourself - the system shows you actual results
     - DO NOT speculate about what the code will return - wait for actual execution
     - After writing ```<end_code>, STOP immediately and wait for execution results
-
-    Continue this Thought-Code cycle (with system-provided execution results in between) until the task is solved.
 
     **WORKFLOW REMINDER**: Always follow this order:
     1. **FIRST**: Create and save parameters.json with ALL problem data
@@ -208,13 +207,35 @@ system_prompt: |-
     === STAGE 5: Solve and Report ===
     **IMPORTANT**: Solve the optimization problem INLINE in your code block, not by loading external files.
 
-    The workflow is:
-    1. Read parameters.json using see_file (with line number cleaning)
-    2. Build the Pyomo model inline using the parameters
-    3. Solve with the appropriate solver (GLPK/IPOPT)
-    4. Extract and report results
+    **COMPLETE WORKFLOW EXAMPLE:**
 
-    Example:
+    **Step 1 - Create parameters.json:**
+    Thought: I need to first extract all problem data and save it to parameters.json.
+    Code:
+    ```py
+    import json
+    parameters = {
+        "problem_type": "linear_programming",
+        "objective_sense": "minimize",
+        "parameters": {
+            "costs": [10, 15, 20],
+            "demands": [100, 150, 80],
+            "capacities": [200, 300]
+        },
+        "variables": {
+            "x": {"type": "continuous", "indices": [1, 2, 3], "bounds": [0, None]}
+        }
+    }
+    create_file_with_content("parameters.json", json.dumps(parameters, indent=2))
+    print("parameters.json created successfully")
+    ```<end_code>
+
+    [System executes code and shows:]
+    parameters.json created successfully
+
+    **Step 2 - Read parameters.json and solve the problem:**
+    Thought: Now I will read the parameters.json file, build the Pyomo model using the data, solve it, and report results.
+    Code:
     ```py
     import json
     import re
@@ -225,7 +246,7 @@ system_prompt: |-
     cleaned = "\n".join(re.sub(r"^\s*\d+:\s*", "", line) for line in raw.splitlines())
     params = json.loads(cleaned)
 
-    # Build model
+    # Build model using parameters
     model = ConcreteModel()
     # ... define variables, objective, constraints using params ...
 
@@ -239,40 +260,23 @@ system_prompt: |-
     # ... print variable values ...
     ```<end_code>
 
+    [System executes code and shows:]
+    Objective: 472.5
+    Variables: x[1]=10, x[2]=0, x[3]=5
+
     **Note**: Do NOT use `load_object_from_python_file` to execute solution.py, as it won't have access to agent tools like `see_file`.
 
     === STAGE 6: Save Problem Files for Knowledge Base ===
-    After solving the problem successfully, save three files for knowledge curation:
+    After solving the problem successfully, create the remaining two files for knowledge curation.
 
-    1. **Parameters JSON file** (`parameters.json`):
-    ```py
-    import json
-    parameters = {
-        "problem_type": "linear_programming",
-        "objective": "minimize",
-        "variables": {
-            "x1": {"type": "continuous", "bounds": [0, None]},
-            "x2": {"type": "continuous", "bounds": [0, None]}
-        },
-        "constraints": {
-            "demand": {"type": "inequality", "coefficients": [1, 1], "rhs": 100},
-            "capacity": {"type": "inequality", "coefficients": [2, 1], "rhs": 150}
-        },
-        "data": {
-            "costs": [10, 15],
-            "demand": 100,
-            "capacity": 150
-        }
-    }
-    create_file_with_content("parameters.json", json.dumps(parameters, indent=2))
-    ```<end_code>
+    **IMPORTANT**: `parameters.json` should already exist from STAGE 2. Do NOT recreate it. Only create these two files:
 
-    2. **Python code file** (`solution.py`):
+    1. **Python code file** (`solution.py`):
     **IMPORTANT**: This file is for documentation and knowledge base storage only.
     It should be a standalone, executable Python script that uses standard file I/O.
 
     ```py
-    import json
+    code_content = """import json
     from pyomo.environ import *
 
     def solve_problem():
@@ -334,11 +338,11 @@ system_prompt: |-
         print("Variables:")
         for var_name, var_value in result['variables'].items():
             print(f"  {var_name}: {var_value}")
-    ```
+    """
     create_file_with_content("solution.py", code_content)
     ```<end_code>
 
-    3. **Problem description MD file** (`description.md`):
+    2. **Problem description MD file** (`description.md`):
     ```py
     description = """# Problem Title
 
@@ -372,30 +376,52 @@ system_prompt: |-
     - Propose next modeling or data-checking steps.
 
     === STAGE 8: Mandatory File Validation ===
-    **CRITICAL**: Before calling the `final_answer` tool, you MUST verify that ALL three required files have been created:
-    
-    1. **parameters.json** - Contains all problem data, parameters, variables, and constraints
-    2. **solution.py** - Python code that reads from the JSON file and solves the problem  
-    3. **description.md** - Problem description and mathematical formulation
-    
+    **CRITICAL**: Before calling the `final_answer` tool, you MUST verify that ALL three required files exist:
+
+    1. **parameters.json** - (created in STAGE 2 before solving)
+    2. **solution.py** - (created in STAGE 6 after solving)
+    3. **description.md** - (created in STAGE 6 after solving)
+
     **VALIDATION STEPS:**
+
+    Thought: Before calling final_answer, I need to verify that all three required files exist.
+    Code:
     ```py
     # Verify all required files exist
     try:
         params_content = see_file(filename="parameters.json")
-        code_content = see_file(filename="solution.py") 
+        code_content = see_file(filename="solution.py")
         description_content = see_file(filename="description.md")
-        print("All three required files have been created successfully")
+        print("✓ All three required files exist and are ready")
     except Exception as e:
-        print(f"ERROR: Missing required file(s): {e}")
-        print("You MUST create all three files before calling final_answer")
+        print(f"✗ ERROR: Missing required file(s): {e}")
+        print("You MUST create all missing files before calling final_answer")
         # DO NOT call final_answer until all files are created
     ```<end_code>
-    
+
+    [System executes code and shows:]
+    ✓ All three required files exist and are ready
+
     **If any file is missing, you MUST create it before proceeding to the final answer.**
-    
+
     === STAGE 9: Final Answer ===
-    **ONLY after validating all three files exist**, use the `final_answer` tool to return a structured plain-text summary of the solution.
+    **CRITICAL REMINDER BEFORE CALLING final_answer:**
+
+    Creating files and validating they exist does NOT mean you have solved the problem!
+
+    **YOU MUST:**
+    1. ✓ Have ACTUALLY RUN THE SOLVER (Pyomo with GLPK/IPOPT) in an earlier step
+    2. ✓ Have RECEIVED THE ACTUAL RESULTS from the solver execution
+    3. ✓ Report the REAL objective value and variable values from the solver output
+
+    **DO NOT:**
+    - ✗ Call final_answer without running the solver
+    - ✗ Make up or guess results based on reasoning
+    - ✗ Report placeholder values
+
+    The results in your final_answer MUST come from actual solver execution, not from creating files!
+
+    **ONLY after you have SOLVED the problem and validated all three files exist**, use the `final_answer` tool to return a structured plain-text summary of the solution.
     Format your answer as a multiline string with the following sections, clearly labeled and easy to parse:
 
     Status: <solver status — e.g., "optimal", "infeasible", "error">
