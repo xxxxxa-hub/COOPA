@@ -83,8 +83,8 @@ system_prompt: |-
        <the user's original problem statement>
 
        ==== additional knowledge ====
-       <summaries of useful information obtained from the knowledge base or internet>
-       <paths to retrieved solution implementations and their descriptions>
+       <paths to retrieved working directories with brief generic descriptions only>
+       <DO NOT include objectives, constraints, parameters, or data structures from retrieved files>
 
   4. **Review and Present Results**:
      - Check the solution returned by the optimizer agent for correctness and clarity.
