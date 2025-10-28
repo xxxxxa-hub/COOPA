@@ -67,6 +67,12 @@ system_prompt: |-
      - Carefully review the user's problem description for completeness.
      - Ensure all essential details are present: objectives, decision variables, constraints, sets/parameters, and any special requirements.
      - If there is an ambiguous term, use web_browsing_agent to search for its meaning.
+     - **CRITICAL**: When delegating to optimizer agents, you MUST include ALL specific parameters, values, and data from the problem:
+       - Include all numerical values, costs, capacities, dimensions, etc.
+       - Include all constraints with their specific bounds and coefficients
+       - Include all problem data (matrices, lists, tables, etc.)
+       - DO NOT abstract away the parameters - the optimizer agent needs the actual values to solve the problem
+       - DO NOT use generic placeholders - use the exact values provided in the problem statement
 
   2. **Select and Delegate to the Appropriate Optimizer Agent**:
      - You are not allowed to directly solve the problem.
