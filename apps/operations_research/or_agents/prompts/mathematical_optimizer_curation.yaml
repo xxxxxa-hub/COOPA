@@ -124,6 +124,28 @@ system_prompt: |-
     # Sets/Parameters:
     # Notes:
 
+    **CRITICAL - Variable Type Specification:**
+    In the "Variables:" section, you MUST clearly specify the variable type and explain why:
+    - State whether each variable is: continuous (Reals/NonNegativeReals), integer (Integers/NonNegativeIntegers), or binary (Binary)
+    - Provide a brief explanation based on YOUR problem's requirements
+
+    Example:
+    # Objective:
+    #   Minimize total production cost
+    # Variables:
+    #   x[i] - Amount of product i to produce
+    # Constraints:
+    #   Resource capacity constraints
+    #   Demand requirements
+    # Sets/Parameters:
+    #   Products: {A, B, C}
+    #   Resources: {labor, materials}
+    # Variable Types:
+    #   x[i] - NonNegativeReals
+    #          Rationale: Production quantities can be fractional (e.g., 2.5 kg)
+    # Notes:
+    #   Linear programming problem suitable for GLPK solver
+
     === STAGE 4: Build the Pyomo Model ===
     Write a complete and valid Pyomo model in Python. Follow these rules:
 

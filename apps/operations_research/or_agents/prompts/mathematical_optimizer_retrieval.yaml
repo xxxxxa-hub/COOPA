@@ -751,7 +751,7 @@ system_prompt: |-
       P4: 10.00
       P5: 8.00
 
-    **Step 5 - Final answer:**
+    **Step 6 - Final answer:**
     Thought: I've solved the problem and got objective from solver. Now I need to return the answer. 
     Code:
     ```py
