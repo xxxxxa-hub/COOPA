@@ -31,7 +31,20 @@ from general_tools.file_editing.file_editing_tools import (
 # import model utilities
 from .model_utils import build_model
 
-def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/operations_research/or_knowledge_base", index_dir="apps/operations_research/or_vector_store", working_directory=None, is_curation=False):
+def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/operations_research/or_knowledge_base", index_dir="apps/operations_research/or_vector_store", working_directory=None, mode="retrieval"):
+    """
+    Create a manager agent for operations research problems.
+
+    Args:
+        mode (str): One of "curation", "no-retrieval", or "retrieval"
+            - "curation": Uses curation prompt, includes knowledge_curation_agent
+            - "no-retrieval": Uses curation prompt, NO knowledge agents
+            - "retrieval": Uses retrieval prompt, includes knowledge_retrieval_agent
+    """
+    # Validate mode
+    if mode not in ["curation", "no-retrieval", "retrieval"]:
+        raise ValueError(f"Invalid mode: {mode}. Must be one of 'curation', 'no-retrieval', or 'retrieval'")
+
     # Define the working directory
     if working_directory is None:
         # Use a temporary directory if not specified
@@ -77,53 +90,75 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
         verbosity_level=LogLevel.DEBUG
     )
 
-    if is_curation:
-        managed_agents = [web_browsing_agent, knowledge_curation_agent]
-    else:
-        managed_agents = [web_browsing_agent]
+    # Configure managed agents for optimizer agents based on mode
+    # if mode == "curation":
+    #     managed_agents_for_optimizers = [web_browsing_agent, knowledge_curation_agent]
+    # else:  # "no-retrieval" or "retrieval"
+    managed_agents_for_optimizers = [web_browsing_agent]
+
+    # Determine which prompt to use for optimizer agents
+    # Both "curation" and "no-retrieval" use the curation prompt
+    use_curation_prompt = (mode != "retrieval")
 
     # Create the mathematical optimizer agent
     mathematical_optimizer_agent = create_mathematical_optimizer_agent(
         model_id=model_id,
-        managed_agents=managed_agents,
+        managed_agents=managed_agents_for_optimizers,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG,
-        is_curation=is_curation
+        is_curation=use_curation_prompt
     )
     # Create the combinatorial optimizer agent
     combinatorial_optimizer_agent = create_combinatorial_optimizer_agent(
         model_id=model_id,
-        managed_agents=managed_agents,
+        managed_agents=managed_agents_for_optimizers,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG,
-        is_curation=is_curation
+        is_curation=use_curation_prompt
     )
     # Create the metaheuristic optimizer agent
     metaheuristic_optimizer_agent = create_metaheuristic_optimizer_agent(
         model_id=model_id,
-        managed_agents=managed_agents,
+        managed_agents=managed_agents_for_optimizers,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG,
-        is_curation=is_curation
+        is_curation=use_curation_prompt
     )
     # Create the general optimizer agent
     general_optimizer_agent = create_general_optimizer_agent(
         model_id=model_id,
-        managed_agents=managed_agents,
+        managed_agents=managed_agents_for_optimizers,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG,
-        is_curation=is_curation
+        is_curation=use_curation_prompt
     )
 
-    # Load the prompt template
-    if is_curation:
+    # Load the prompt template based on mode
+    # "curation" and "no-retrieval" use the same prompt
+    if mode in ["curation", "no-retrieval"]:
         manager_path = "manager_curation.yaml"
-    else:
+    else:  # "retrieval"
         manager_path = "manager_retrieval.yaml"
 
     manager_prompt_template = yaml.safe_load(
                 importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath(manager_path).read_text(encoding="utf-8")
             )
+
+    # Configure managed agents for manager agent based on mode
+    manager_managed_agents = [
+        web_browsing_agent,
+        general_optimizer_agent,
+        mathematical_optimizer_agent,
+        combinatorial_optimizer_agent,
+        metaheuristic_optimizer_agent,
+    ]
+
+    # Add knowledge agent based on mode
+    if mode == "curation":
+        manager_managed_agents.insert(1, knowledge_curation_agent)
+    elif mode == "retrieval":
+        manager_managed_agents.insert(1, knowledge_retrieval_agent)
+    # For "no-retrieval", don't add any knowledge agent
 
     # Create the manager agent
     manager_agent = CodeAgent(
@@ -135,14 +170,7 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
             DeleteFileOrFolder(working_directory),
             CreateFileWithContent(working_directory),
             ],
-        managed_agents=[
-            web_browsing_agent,
-            knowledge_curation_agent if is_curation else knowledge_retrieval_agent,
-            general_optimizer_agent,
-            mathematical_optimizer_agent,
-            combinatorial_optimizer_agent,
-            metaheuristic_optimizer_agent,
-            ],
+        managed_agents=manager_managed_agents,
         prompt_templates=manager_prompt_template,
         additional_authorized_imports=['numpy', 'numpy.*', 'random', 'random.*', 'math', 'math.*', 'json'],
         model=build_model(model_id),
