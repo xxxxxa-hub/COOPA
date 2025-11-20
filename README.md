@@ -2,7 +2,7 @@
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/cyrilli/COOPA.git
+git clone git@github.com:xxxxxa-hub/COOPA.git
 cd COOPA
 ```
 
