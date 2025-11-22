@@ -1,0 +1,436 @@
+"""
+Iterative formulation refinement with confidence evaluation.
+
+This module provides functionality to:
+1. Extract an initial formulation from a problem
+2. Evaluate confidence in the formulation
+3. Refine the formulation based on confidence feedback
+4. Iterate until the formulation meets confidence thresholds
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from typing import Dict, Any, Optional, Tuple
+from openai import OpenAI
+
+from .formulation import (
+    OptimizationFormulation,
+    create_instructor_client,
+    extract_formulation,
+)
+
+
+def format_formulation_for_evaluation(formulation: OptimizationFormulation) -> str:
+    """
+    Convert an OptimizationFormulation object into a formatted string for evaluation.
+
+    Args:
+        formulation: The structured optimization formulation
+
+    Returns:
+        A formatted string representation of the formulation
+    """
+    parts = []
+
+    # Parameters section
+    if formulation.parameters:
+        parts.append("## PARAMETERS:")
+        for param in formulation.parameters:
+            param_str = f"- {param.name} ({param.data_type}): {param.description}"
+            if param.value is not None:
+                param_str += f" = {param.value}"
+            if param.units:
+                param_str += f" [{param.units}]"
+            parts.append(param_str)
+
+    # Variables section
+    if formulation.variables:
+        parts.append("\n## DECISION VARIABLES:")
+        for var in formulation.variables:
+            var_str = f"- {var.name} ({var.data_type}): {var.description}"
+            var_str += f" | Domain: {var.domain}"
+            parts.append(var_str)
+
+    # Objective section
+    parts.append("\n## OBJECTIVE:")
+    parts.append(f"- Sense: {formulation.objective.sense.upper()}")
+    parts.append(f"- Description: {formulation.objective.description}")
+    parts.append(f"- Expression: {formulation.objective.expression}")
+    parts.append(f"- Variables involved: {', '.join(formulation.objective.variables_involved)}")
+
+    # Constraints section
+    if formulation.constraints:
+        parts.append("\n## CONSTRAINTS:")
+        for i, constraint in enumerate(formulation.constraints, 1):
+            parts.append(f"\n{i}. {constraint.name} ({constraint.sense}):")
+            parts.append(f"   Expression: {constraint.expression}")
+            parts.append(f"   Variables: {', '.join(constraint.variables_involved)}")
+
+    return "\n".join(parts)
+
+
+def evaluate_formulation_confidence(
+    raw_question: str,
+    formulation: OptimizationFormulation,
+    api_key: Optional[str] = None,
+    model: str = "gpt-4o"
+) -> Dict[str, Any]:
+    """
+    Evaluate confidence scores for each component of the formulation.
+
+    Args:
+        raw_question: The original optimization problem question
+        formulation: The structured formulation to evaluate
+        api_key: OpenAI API key (if None, uses OPENAI_API_KEY env variable)
+        model: OpenAI model to use for evaluation
+
+    Returns:
+        Dictionary with confidence scores and explanations for each component
+    """
+    if api_key is None:
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("API key must be provided or set in OPENAI_API_KEY environment variable")
+
+    client = OpenAI(api_key=api_key)
+
+    # Format formulation for evaluation
+    formulation_str = format_formulation_for_evaluation(formulation)
+
+    # Create evaluation prompt
+    evaluation_prompt = f"""You are an expert in optimization and mathematical modeling. Your task is to evaluate the quality and correctness of an optimization problem formulation.
+
+Given:
+1. **Raw Question**: {raw_question}
+
+2. **Proposed Formulation**:
+{formulation_str}
+
+Please evaluate the confidence (0-100) for each of the following components. For each bullet point in each section, assess if it is correct, complete, and appropriate:
+
+1. **PARAMETERS**: Evaluate each parameter definition
+   - Are all necessary parameters identified?
+   - Are the values and units correct?
+   - Are parameter names clear and consistent?
+
+2. **DECISION VARIABLES**: Evaluate each decision variable
+   - Are all necessary decision variables defined?
+   - Are the domains correct?
+   - Do they properly represent what needs to be optimized?
+
+3. **OBJECTIVE**: Evaluate the objective function
+   - Is the optimization sense (maximize/minimize) correct?
+   - Is the mathematical expression correct?
+   - Does it accurately represent what should be optimized?
+   - Are all variables properly used?
+
+4. **CONSTRAINTS**: Evaluate each constraint
+   - Are all necessary constraints included?
+   - Is each constraint correctly formulated?
+   - Are the inequality/equality signs correct?
+   - Are any important constraints missing?
+
+For each component, provide:
+- A confidence score from 0-100 (0 = completely incorrect, 100 = perfect)
+- A brief explanation (1-3 sentences) justifying the score, mentioning specific issues if any
+
+Return your evaluation in the following JSON format:
+{{
+  "parameters": {{
+    "confidence": <score 0-100>,
+    "explanation": "<explanation>"
+  }},
+  "decision_variables": {{
+    "confidence": <score 0-100>,
+    "explanation": "<explanation>"
+  }},
+  "objective": {{
+    "confidence": <score 0-100>,
+    "explanation": "<explanation>"
+  }},
+  "constraints": {{
+    "confidence": <score 0-100>,
+    "explanation": "<explanation>"
+  }},
+  "overall_confidence": <average score>,
+  "overall_assessment": "<brief overall assessment>"
+}}
+
+Be critical and thorough in your evaluation. Respond ONLY with the JSON object, no additional text."""
+
+    # Call OpenAI API
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "user", "content": evaluation_prompt}
+        ]
+    )
+
+    # Parse response
+    response_text = response.choices[0].message.content
+
+    # Extract JSON from response (in case there's extra text)
+    json_start = response_text.find('{')
+    json_end = response_text.rfind('}') + 1
+
+    if json_start == -1 or json_end == 0:
+        raise ValueError("Could not find JSON in response")
+
+    json_str = response_text[json_start:json_end]
+    evaluation = json.loads(json_str)
+
+    return evaluation
+
+
+def refine_formulation(
+    raw_question: str,
+    current_formulation: OptimizationFormulation,
+    confidence_evaluation: Dict[str, Any],
+    client,
+    model: str = "gpt-4o-mini"
+) -> OptimizationFormulation:
+    """
+    Refine a formulation based on confidence evaluation feedback.
+
+    Args:
+        raw_question: The original problem text
+        current_formulation: The current formulation to refine
+        confidence_evaluation: The confidence evaluation results
+        client: Instructor client for extraction
+        model: Model to use for refinement
+
+    Returns:
+        Refined OptimizationFormulation
+    """
+    # Format current formulation
+    current_formulation_str = format_formulation_for_evaluation(current_formulation)
+
+    # Create refinement prompt
+    refinement_prompt = f"""You previously created an optimization formulation, but it needs refinement based on the following confidence evaluation:
+
+**Original Problem:**
+{raw_question}
+
+**Current Formulation:**
+{current_formulation_str}
+
+**Confidence Evaluation:**
+- Parameters: {confidence_evaluation['parameters']['confidence']}/100
+  Issue: {confidence_evaluation['parameters']['explanation']}
+
+- Decision Variables: {confidence_evaluation['decision_variables']['confidence']}/100
+  Issue: {confidence_evaluation['decision_variables']['explanation']}
+
+- Objective: {confidence_evaluation['objective']['confidence']}/100
+  Issue: {confidence_evaluation['objective']['explanation']}
+
+- Constraints: {confidence_evaluation['constraints']['confidence']}/100
+  Issue: {confidence_evaluation['constraints']['explanation']}
+
+**Overall Assessment:**
+{confidence_evaluation['overall_assessment']}
+
+Please create a REFINED formulation that addresses all the identified issues. Pay special attention to the components with lower confidence scores. Ensure that:
+1. All parameters are correctly identified and valued
+2. All decision variables are properly defined with correct domains
+3. The objective function correctly represents what needs to be optimized
+4. All necessary constraints are included and correctly formulated
+
+Provide the complete refined formulation."""
+
+    # Use instructor to extract refined formulation
+    from openai.types.chat import ChatCompletionMessageParam
+    from .formulation import SYSTEM_PROMPT
+
+    messages: list[ChatCompletionMessageParam] = [
+        {"role": "system", "content": SYSTEM_PROMPT.strip()},
+        {"role": "user", "content": refinement_prompt},
+    ]
+
+    refined_formulation = client.chat.completions.create(
+        model=model,
+        response_model=OptimizationFormulation,
+        messages=messages
+    )
+
+    return refined_formulation
+
+
+def extract_formulation_with_refinement(
+    problem_text: str,
+    confidence_threshold: float = 90.0,
+    max_iterations: int = 3,
+    formulation_model: str = "gpt-4o-mini",
+    evaluation_model: str = "gpt-4o",
+    api_key: Optional[str] = None,
+    verbose: bool = True
+) -> Tuple[OptimizationFormulation, Dict[str, Any], int]:
+    """
+    Extract and iteratively refine a formulation until confidence threshold is met.
+
+    IMPORTANT: The confidence_threshold is applied to EACH individual component
+    (parameters, decision_variables, objective, constraints), not just the overall
+    average. ALL four components must meet or exceed the threshold for the
+    formulation to be accepted.
+
+    Note: This function tracks ALL formulations generated during iteration and
+    returns the one with the HIGHEST overall confidence score, which may not be
+    the final iteration.
+
+    Args:
+        problem_text: The original optimization problem text
+        confidence_threshold: Minimum confidence score (0-100) that EACH component
+            must achieve. Since all components must pass individually, consider
+            using 75-85 for balanced quality (not 90+ which may be too strict).
+        max_iterations: Maximum number of refinement iterations
+        formulation_model: Model to use for formulation extraction/refinement
+        evaluation_model: Model to use for confidence evaluation
+        api_key: OpenAI API key (if None, uses OPENAI_API_KEY env variable)
+        verbose: Whether to print progress information
+
+    Returns:
+        Tuple of (best_formulation, best_evaluation, best_iteration_number)
+        where best_formulation is the one with the highest overall confidence score
+    """
+    # Create instructor client for formulation
+    formulation_client = create_instructor_client(timeout=120.0)
+
+    # Extract initial formulation
+    if verbose:
+        print("Extracting initial formulation...")
+
+    formulation = extract_formulation(
+        problem_text=problem_text,
+        client=formulation_client,
+        model=formulation_model
+    )
+
+    # Track all formulations and their evaluations
+    formulation_history = []
+
+    # Iterative refinement loop
+    for iteration in range(1, max_iterations + 1):
+        if verbose:
+            print(f"\n{'=' * 80}")
+            print(f"ITERATION {iteration}/{max_iterations}")
+            print('=' * 80)
+            print()
+            print("Current Formulation:")
+            print("-" * 80)
+            print(format_formulation_for_evaluation(formulation))
+            print("-" * 80)
+            print()
+            print("Evaluating confidence...")
+
+        # Evaluate confidence
+        evaluation = evaluate_formulation_confidence(
+            raw_question=problem_text,
+            formulation=formulation,
+            api_key=api_key,
+            model=evaluation_model
+        )
+
+        overall_confidence = evaluation.get("overall_confidence", 0)
+
+        # Store this formulation in history
+        formulation_history.append({
+            'iteration': iteration,
+            'formulation': formulation,
+            'evaluation': evaluation,
+            'overall_confidence': overall_confidence
+        })
+
+        # Get individual component confidences
+        params_confidence = evaluation['parameters']['confidence']
+        vars_confidence = evaluation['decision_variables']['confidence']
+        obj_confidence = evaluation['objective']['confidence']
+        constraints_confidence = evaluation['constraints']['confidence']
+
+        if verbose:
+            print()
+            print("Confidence Scores:")
+            print(f"  Overall: {overall_confidence}/100")
+            print(f"  - Parameters: {params_confidence}/100")
+            print(f"    {evaluation['parameters']['explanation']}")
+            print(f"  - Decision Variables: {vars_confidence}/100")
+            print(f"    {evaluation['decision_variables']['explanation']}")
+            print(f"  - Objective: {obj_confidence}/100")
+            print(f"    {evaluation['objective']['explanation']}")
+            print(f"  - Constraints: {constraints_confidence}/100")
+            print(f"    {evaluation['constraints']['explanation']}")
+            print()
+
+        # Check if ALL individual components meet the threshold
+        all_components_pass = (
+            params_confidence >= confidence_threshold and
+            vars_confidence >= confidence_threshold and
+            obj_confidence >= confidence_threshold and
+            constraints_confidence >= confidence_threshold
+        )
+
+        if all_components_pass:
+            if verbose:
+                print(f"\n✓ All components meet threshold (>= {confidence_threshold})")
+            # Don't return immediately - continue to see if we can get even better
+            # but note that we've found a passing formulation
+            if verbose:
+                print(f"Continuing to check if further refinement improves the score...")
+
+        # If this is the last iteration, we'll select the best from history
+        if iteration == max_iterations:
+            if verbose and not all_components_pass:
+                failing_components = []
+                if params_confidence < confidence_threshold:
+                    failing_components.append(f"Parameters: {params_confidence}")
+                if vars_confidence < confidence_threshold:
+                    failing_components.append(f"Variables: {vars_confidence}")
+                if obj_confidence < confidence_threshold:
+                    failing_components.append(f"Objective: {obj_confidence}")
+                if constraints_confidence < confidence_threshold:
+                    failing_components.append(f"Constraints: {constraints_confidence}")
+
+                print(f"\n⚠ Max iterations reached. Components below threshold: {', '.join(failing_components)}")
+            break
+
+        # Refine formulation
+        if verbose:
+            print(f"Refining formulation based on feedback...")
+
+        try:
+            formulation = refine_formulation(
+                raw_question=problem_text,
+                current_formulation=formulation,
+                confidence_evaluation=evaluation,
+                client=formulation_client,
+                model=formulation_model
+            )
+            if verbose:
+                print("✓ Refinement complete")
+        except Exception as e:
+            if verbose:
+                print(f"✗ Refinement failed: {e}")
+                print(f"Selecting best formulation from history...")
+            # Don't return immediately, break to select best from history
+            break
+
+    # Select the best formulation from history based on highest overall confidence
+    if not formulation_history:
+        raise ValueError("No formulations were evaluated")
+
+    best_entry = max(formulation_history, key=lambda x: x['overall_confidence'])
+
+    if verbose:
+        print(f"\n{'=' * 80}")
+        print("SELECTING BEST FORMULATION FROM HISTORY")
+        print('=' * 80)
+        print(f"\nEvaluated {len(formulation_history)} formulation(s) across {best_entry['iteration']} iteration(s)")
+        print("\nConfidence scores by iteration:")
+        for entry in formulation_history:
+            marker = " ← SELECTED" if entry == best_entry else ""
+            print(f"  Iteration {entry['iteration']}: {entry['overall_confidence']}/100{marker}")
+        print(f"\nReturning formulation from iteration {best_entry['iteration']} "
+              f"with overall confidence {best_entry['overall_confidence']}/100")
+
+    return best_entry['formulation'], best_entry['evaluation'], best_entry['iteration']
