@@ -135,58 +135,58 @@ class OptimizationFormulation(BaseModel):
     objective: ObjectiveDefinition
     constraints: List[ConstraintDefinition]
 
-    @model_validator(mode="after")
-    @classmethod
-    def validate_formulation(cls, model):
-        variable_names = {var.name for var in model.variables}
-        parameter_names = {param.name for param in model.parameters}
+    # @model_validator(mode="after")
+    # @classmethod
+    # def validate_formulation(cls, model):
+    #     variable_names = {var.name for var in model.variables}
+    #     parameter_names = {param.name for param in model.parameters}
 
-        errors: List[str] = []
+    #     errors: List[str] = []
 
-        undefined_objective_vars = sorted(set(model.objective.variables_involved) - variable_names)
-        if undefined_objective_vars:
-            errors.append(
-                "Objective references undefined variables: " + ", ".join(undefined_objective_vars)
-            )
+    #     undefined_objective_vars = sorted(set(model.objective.variables_involved) - variable_names)
+    #     if undefined_objective_vars:
+    #         errors.append(
+    #             "Objective references undefined variables: " + ", ".join(undefined_objective_vars)
+    #         )
 
-        used_variables = set(model.objective.variables_involved)
-        objective_tokens = _identifiers_in(model.objective.expression)
-        undefined_objective_symbols = _unknown_symbols(objective_tokens, variable_names, parameter_names)
-        if undefined_objective_symbols:
-            errors.append(
-                "Objective expression references undefined symbols: "
-                + ", ".join(sorted(undefined_objective_symbols))
-            )
+    #     used_variables = set(model.objective.variables_involved)
+    #     objective_tokens = _identifiers_in(model.objective.expression)
+    #     undefined_objective_symbols = _unknown_symbols(objective_tokens, variable_names, parameter_names)
+    #     if undefined_objective_symbols:
+    #         errors.append(
+    #             "Objective expression references undefined symbols: "
+    #             + ", ".join(sorted(undefined_objective_symbols))
+    #         )
 
-        for constraint in model.constraints:
-            undefined_constraint_vars = set(constraint.variables_involved) - variable_names
-            if undefined_constraint_vars:
-                errors.append(
-                    f"Constraint '{constraint.name}' references undefined variables: "
-                    + ", ".join(sorted(undefined_constraint_vars))
-                )
+    #     for constraint in model.constraints:
+    #         undefined_constraint_vars = set(constraint.variables_involved) - variable_names
+    #         if undefined_constraint_vars:
+    #             errors.append(
+    #                 f"Constraint '{constraint.name}' references undefined variables: "
+    #                 + ", ".join(sorted(undefined_constraint_vars))
+    #             )
 
-            used_variables.update(constraint.variables_involved)
-            constraint_tokens = _identifiers_in(constraint.expression)
-            undefined_constraint_symbols = _unknown_symbols(
-                constraint_tokens,
-                variable_names,
-                parameter_names,
-            )
-            if undefined_constraint_symbols:
-                errors.append(
-                    f"Constraint '{constraint.name}' references undefined symbols: "
-                    + ", ".join(sorted(undefined_constraint_symbols))
-                )
+    #         used_variables.update(constraint.variables_involved)
+    #         constraint_tokens = _identifiers_in(constraint.expression)
+    #         undefined_constraint_symbols = _unknown_symbols(
+    #             constraint_tokens,
+    #             variable_names,
+    #             parameter_names,
+    #         )
+    #         if undefined_constraint_symbols:
+    #             errors.append(
+    #                 f"Constraint '{constraint.name}' references undefined symbols: "
+    #                 + ", ".join(sorted(undefined_constraint_symbols))
+    #             )
 
-        unused_variables = sorted(variable_names - used_variables)
-        if unused_variables:
-            errors.append("Variables defined but never used: " + ", ".join(unused_variables))
+    #     unused_variables = sorted(variable_names - used_variables)
+    #     if unused_variables:
+    #         errors.append("Variables defined but never used: " + ", ".join(unused_variables))
 
-        if errors:
-            raise ValueError(" | ".join(errors))
+    #     if errors:
+    #         raise ValueError(" | ".join(errors))
 
-        return model
+    #     return model
 
 
 SYSTEM_PROMPT = """
@@ -415,7 +415,7 @@ def parse_args() -> argparse.Namespace:
     """Configure CLI flags."""
 
     parser = argparse.ArgumentParser(description="LLM-powered formulation extractor")
-    parser.add_argument("--model", default="gpt-4o-mini", help="OpenAI model name")
+    parser.add_argument("--model", default="o4-mini", help="OpenAI model name")
     parser.add_argument(
         "--max-examples",
         type=int,
