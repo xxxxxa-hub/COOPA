@@ -51,6 +51,13 @@ from .run import create_manager_agent
 # Import the knowledge base initialization function
 from general_tools.kb_repo_management.kb_initialization import create_or_knowledge_base
 
+# Import formulation extraction tools
+from .or_agents.formulation import (
+    create_instructor_client,
+    extract_formulation,
+    OptimizationFormulation
+)
+
 def strip_ansi_codes(text):
     """Remove ANSI escape codes from text."""
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -75,6 +82,58 @@ def get_current_timestamp():
     now = datetime.now()
     return now.strftime("%Y%m%d_%H%M%S")
 
+def format_formulation_prompt(formulation: OptimizationFormulation) -> str:
+    """
+    Convert an OptimizationFormulation object into a structured prompt for the manager agent.
+
+    Args:
+        formulation: The structured optimization formulation
+
+    Returns:
+        A formatted prompt string containing all formulation elements
+    """
+    prompt_parts = []
+
+    prompt_parts.append("Solve the following structured operations research problem:\n")
+
+    # Parameters section
+    if formulation.parameters:
+        prompt_parts.append("\n## PARAMETERS:")
+        for param in formulation.parameters:
+            param_str = f"- {param.name} ({param.data_type}): {param.description}"
+            if param.value is not None:
+                param_str += f" = {param.value}"
+            if param.units:
+                param_str += f" [{param.units}]"
+            prompt_parts.append(param_str)
+
+    # Variables section
+    if formulation.variables:
+        prompt_parts.append("\n## DECISION VARIABLES:")
+        for var in formulation.variables:
+            var_str = f"- {var.name} ({var.data_type}): {var.description}"
+            var_str += f" | Domain: {var.domain}"
+            prompt_parts.append(var_str)
+
+    # Objective section
+    prompt_parts.append("\n## OBJECTIVE:")
+    prompt_parts.append(f"- Sense: {formulation.objective.sense.upper()}")
+    prompt_parts.append(f"- Description: {formulation.objective.description}")
+    prompt_parts.append(f"- Expression: {formulation.objective.expression}")
+    prompt_parts.append(f"- Variables involved: {', '.join(formulation.objective.variables_involved)}")
+
+    # Constraints section
+    if formulation.constraints:
+        prompt_parts.append("\n## CONSTRAINTS:")
+        for i, constraint in enumerate(formulation.constraints, 1):
+            prompt_parts.append(f"\n{i}. {constraint.name} ({constraint.sense}):")
+            prompt_parts.append(f"   Expression: {constraint.expression}")
+            prompt_parts.append(f"   Variables: {', '.join(constraint.variables_involved)}")
+
+    prompt_parts.append("\n\nYou must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong.")
+
+    return "\n".join(prompt_parts)
+
 def run_experiment(
     dataset_path,
     cur_date_time,
@@ -85,7 +144,9 @@ def run_experiment(
     output_path="experiment_results.jsonl",
     indices=None,
     mode="retrieval",
-    log_to_file=False
+    log_to_file=False,
+    skip_formulation=False,
+    formulation_model="gpt-4o-mini"
 ):
     """
     Run experiments on selected problem indices.
@@ -143,19 +204,27 @@ def run_experiment(
         working_directory=working_directory,
         mode=mode,
     )
-    
+
+    # Create instructor client for formulation extraction (if not skipped)
+    formulation_client = None
+    if not skip_formulation:
+        print(f"Initializing formulation extraction client (using model: {formulation_model})...")
+        formulation_client = create_instructor_client(timeout=90.0)
+    else:
+        print("Formulation extraction is disabled. Using raw problem text.")
+
     results = []
 
     # Create logs directory
-    log_dir = Path(output_path).parent / "logs" / "v8"
+    log_dir = Path(output_path).parent / "logs" / "v10"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     with open(dataset_path, "r", encoding="utf-8") as f:
         for line in f:
             item = json.loads(line)
-            question = item["question"]
-            gold_answer = item["answer"]
-            idx = item.get("index", None)
+            question = item["en_question"]
+            gold_answer = item["en_answer"]
+            idx = item.get("id", None)
 
             # Skip problems not in indices if filtering is enabled
             if indices is not None and int(idx) not in indices:
@@ -168,8 +237,26 @@ def run_experiment(
             os.makedirs(working_directory, exist_ok=True)
             # with using_session(session_id=session_id):
 
-                # Ask the agent to solve the problem
-            prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+            # Extract structured formulation from raw problem text (if enabled)
+            if not skip_formulation and formulation_client is not None:
+                try:
+                    print(f"Extracting formulation for problem {idx}...")
+                    formulation = extract_formulation(
+                        problem_text=question,
+                        client=formulation_client,
+                        model=formulation_model
+                    )
+                    # Format the formulation into a structured prompt
+                    prompt = format_formulation_prompt(formulation)
+                    print(f"Formulation extracted successfully for problem {idx}")
+                except Exception as e:
+                    print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
+                    print(f"Falling back to raw problem text.")
+                    # Fall back to original prompt if formulation fails
+                    prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+            else:
+                # Use raw problem text if formulation is skipped
+                prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
 
             if log_to_file:
                 # Create log file for this question
@@ -350,6 +437,10 @@ Mode options:
 
     parser.add_argument("--log_to_file", action="store_true",
                        help="Enable logging of agent output to individual log files for each question")
+    parser.add_argument("--skip_formulation", action="store_true",
+                       help="Skip formulation extraction and use raw problem text directly")
+    parser.add_argument("--formulation_model", type=str, default="o4-mini",
+                       help="Model to use for formulation extraction (default: o4-mini)")
     args = parser.parse_args()
 
     # Determine mode from arguments
@@ -363,12 +454,12 @@ Mode options:
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v8").resolve()
+        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v10").resolve()
     if args.output is None:
         # Include mode in filename
-        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v8.jsonl").resolve()
+        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v10.jsonl").resolve()
 
-    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v8").resolve()
+    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v10").resolve()
 
     # Parse indices
     try:
@@ -388,4 +479,6 @@ Mode options:
         indices=indices,
         mode=mode,
         log_to_file=args.log_to_file,
+        skip_formulation=args.skip_formulation,
+        formulation_model=args.formulation_model,
     )

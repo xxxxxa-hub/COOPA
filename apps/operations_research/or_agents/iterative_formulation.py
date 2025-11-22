@@ -260,7 +260,6 @@ Provide the complete refined formulation."""
 
 def extract_formulation_with_refinement(
     problem_text: str,
-    confidence_threshold: float = 90.0,
     max_iterations: int = 3,
     formulation_model: str = "gpt-4o-mini",
     evaluation_model: str = "gpt-4o",
@@ -268,22 +267,15 @@ def extract_formulation_with_refinement(
     verbose: bool = True
 ) -> Tuple[OptimizationFormulation, Dict[str, Any], int]:
     """
-    Extract and iteratively refine a formulation until confidence threshold is met.
+    Extract and iteratively refine a formulation.
 
-    IMPORTANT: The confidence_threshold is applied to EACH individual component
-    (parameters, decision_variables, objective, constraints), not just the overall
-    average. ALL four components must meet or exceed the threshold for the
-    formulation to be accepted.
-
-    Note: This function tracks ALL formulations generated during iteration and
-    returns the one with the HIGHEST overall confidence score, which may not be
-    the final iteration.
+    This function tracks ALL formulations generated during iteration and
+    returns the one with the HIGHEST minimum confidence score across all
+    components (max-min criterion). This ensures the selected formulation
+    has the most balanced quality with no weak components.
 
     Args:
         problem_text: The original optimization problem text
-        confidence_threshold: Minimum confidence score (0-100) that EACH component
-            must achieve. Since all components must pass individually, consider
-            using 75-85 for balanced quality (not 90+ which may be too strict).
         max_iterations: Maximum number of refinement iterations
         formulation_model: Model to use for formulation extraction/refinement
         evaluation_model: Model to use for confidence evaluation
@@ -292,7 +284,8 @@ def extract_formulation_with_refinement(
 
     Returns:
         Tuple of (best_formulation, best_evaluation, best_iteration_number)
-        where best_formulation is the one with the highest overall confidence score
+        where best_formulation is the one with the highest minimum confidence
+        score across all components
     """
     # Create instructor client for formulation
     formulation_client = create_instructor_client(timeout=120.0)
@@ -334,24 +327,34 @@ def extract_formulation_with_refinement(
 
         overall_confidence = evaluation.get("overall_confidence", 0)
 
-        # Store this formulation in history
-        formulation_history.append({
-            'iteration': iteration,
-            'formulation': formulation,
-            'evaluation': evaluation,
-            'overall_confidence': overall_confidence
-        })
-
         # Get individual component confidences
         params_confidence = evaluation['parameters']['confidence']
         vars_confidence = evaluation['decision_variables']['confidence']
         obj_confidence = evaluation['objective']['confidence']
         constraints_confidence = evaluation['constraints']['confidence']
 
+        # Calculate min confidence (weakest component)
+        min_confidence = min(
+            params_confidence,
+            vars_confidence,
+            obj_confidence,
+            constraints_confidence
+        )
+
+        # Store this formulation in history
+        formulation_history.append({
+            'iteration': iteration,
+            'formulation': formulation,
+            'evaluation': evaluation,
+            'overall_confidence': overall_confidence,
+            'min_confidence': min_confidence
+        })
+
         if verbose:
             print()
             print("Confidence Scores:")
             print(f"  Overall: {overall_confidence}/100")
+            print(f"  Min (weakest component): {min_confidence}/100")
             print(f"  - Parameters: {params_confidence}/100")
             print(f"    {evaluation['parameters']['explanation']}")
             print(f"  - Decision Variables: {vars_confidence}/100")
@@ -362,36 +365,8 @@ def extract_formulation_with_refinement(
             print(f"    {evaluation['constraints']['explanation']}")
             print()
 
-        # Check if ALL individual components meet the threshold
-        all_components_pass = (
-            params_confidence >= confidence_threshold and
-            vars_confidence >= confidence_threshold and
-            obj_confidence >= confidence_threshold and
-            constraints_confidence >= confidence_threshold
-        )
-
-        if all_components_pass:
-            if verbose:
-                print(f"\n✓ All components meet threshold (>= {confidence_threshold})")
-            # Don't return immediately - continue to see if we can get even better
-            # but note that we've found a passing formulation
-            if verbose:
-                print(f"Continuing to check if further refinement improves the score...")
-
         # If this is the last iteration, we'll select the best from history
         if iteration == max_iterations:
-            if verbose and not all_components_pass:
-                failing_components = []
-                if params_confidence < confidence_threshold:
-                    failing_components.append(f"Parameters: {params_confidence}")
-                if vars_confidence < confidence_threshold:
-                    failing_components.append(f"Variables: {vars_confidence}")
-                if obj_confidence < confidence_threshold:
-                    failing_components.append(f"Objective: {obj_confidence}")
-                if constraints_confidence < confidence_threshold:
-                    failing_components.append(f"Constraints: {constraints_confidence}")
-
-                print(f"\n⚠ Max iterations reached. Components below threshold: {', '.join(failing_components)}")
             break
 
         # Refine formulation
@@ -415,22 +390,25 @@ def extract_formulation_with_refinement(
             # Don't return immediately, break to select best from history
             break
 
-    # Select the best formulation from history based on highest overall confidence
+    # Select the best formulation from history based on highest min confidence (max-min criterion)
     if not formulation_history:
         raise ValueError("No formulations were evaluated")
 
-    best_entry = max(formulation_history, key=lambda x: x['overall_confidence'])
+    best_entry = max(formulation_history, key=lambda x: x['min_confidence'])
 
     if verbose:
         print(f"\n{'=' * 80}")
-        print("SELECTING BEST FORMULATION FROM HISTORY")
+        print("SELECTING BEST FORMULATION FROM HISTORY (MAX-MIN CRITERION)")
         print('=' * 80)
         print(f"\nEvaluated {len(formulation_history)} formulation(s) across {best_entry['iteration']} iteration(s)")
         print("\nConfidence scores by iteration:")
         for entry in formulation_history:
             marker = " ← SELECTED" if entry == best_entry else ""
-            print(f"  Iteration {entry['iteration']}: {entry['overall_confidence']}/100{marker}")
+            print(f"  Iteration {entry['iteration']}: "
+                  f"Min={entry['min_confidence']}/100, "
+                  f"Overall={entry['overall_confidence']}/100{marker}")
         print(f"\nReturning formulation from iteration {best_entry['iteration']} "
-              f"with overall confidence {best_entry['overall_confidence']}/100")
+              f"with min confidence {best_entry['min_confidence']}/100 "
+              f"(overall: {best_entry['overall_confidence']}/100)")
 
     return best_entry['formulation'], best_entry['evaluation'], best_entry['iteration']

@@ -193,7 +193,6 @@ def run_experiment(
     skip_formulation=False,
     formulation_model="gpt-4o-mini",
     use_iterative_refinement=False,
-    confidence_threshold=80.0,
     max_refinement_iterations=3
 ):
     """
@@ -322,7 +321,6 @@ def run_experiment(
                                     print(f"Extracting formulation with iterative refinement for problem {idx}...")
                                     formulation, evaluation, num_iterations = extract_formulation_with_refinement(
                                         problem_text=question,
-                                        confidence_threshold=confidence_threshold,
                                         max_iterations=max_refinement_iterations,
                                         formulation_model=formulation_model,
                                         evaluation_model=formulation_model,
@@ -411,7 +409,6 @@ def run_experiment(
                             print(f"Extracting formulation with iterative refinement for problem {idx}...")
                             formulation, evaluation, num_iterations = extract_formulation_with_refinement(
                                 problem_text=question,
-                                confidence_threshold=confidence_threshold,
                                 max_iterations=max_refinement_iterations,
                                 formulation_model=formulation_model,
                                 evaluation_model=formulation_model,
@@ -575,10 +572,6 @@ Mode options:
                        help="Model to use for formulation extraction (default: o4-mini)")
     parser.add_argument("--use_iterative_refinement", action="store_true",
                        help="Use iterative refinement with confidence evaluation for formulation extraction")
-    parser.add_argument("--confidence_threshold", type=float, default=90.0,
-                       help="Minimum confidence score (0-100) that EACH component must achieve. "
-                            "All components (parameters, variables, objective, constraints) must "
-                            "individually meet this threshold (default: 90.0)")
     parser.add_argument("--max_refinement_iterations", type=int, default=3,
                        help="Maximum number of refinement iterations (default: 3)")
     args = parser.parse_args()
@@ -614,6 +607,5 @@ Mode options:
         skip_formulation=args.skip_formulation,
         formulation_model=args.formulation_model,
         use_iterative_refinement=args.use_iterative_refinement,
-        confidence_threshold=args.confidence_threshold,
         max_refinement_iterations=args.max_refinement_iterations,
     )

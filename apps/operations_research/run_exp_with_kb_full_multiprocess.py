@@ -60,6 +60,12 @@ from .or_agents.formulation import (
     OptimizationFormulation
 )
 
+# Import iterative formulation refinement
+from .or_agents.iterative_formulation import (
+    extract_formulation_with_refinement,
+    format_formulation_for_evaluation
+)
+
 def strip_ansi_codes(text):
     """Remove ANSI escape codes from text."""
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -187,7 +193,8 @@ def process_single_problem(args_tuple):
         dict: Result dictionary for this problem
     """
     (item, model_id, knowledge_base_directory, index_dir, mode,
-     log_to_file, log_dir, dataset_name, output_path, skip_formulation, formulation_model) = args_tuple
+     log_to_file, log_dir, dataset_name, output_path, skip_formulation, formulation_model,
+     use_iterative_refinement, max_refinement_iterations) = args_tuple
 
     # Normalize dataset item keys to handle different formats (BWOR vs industryor)
     normalized_item = normalize_dataset_item(item)
@@ -208,29 +215,6 @@ def process_single_problem(args_tuple):
             mode=mode,
         )
 
-        # Extract structured formulation from raw problem text (if enabled)
-        # Each worker creates its own formulation client to avoid sharing state
-        if not skip_formulation:
-            try:
-                formulation_client = create_instructor_client(timeout=90.0)
-                print(f"Extracting formulation for problem {idx}...")
-                formulation = extract_formulation(
-                    problem_text=question,
-                    client=formulation_client,
-                    model=formulation_model
-                )
-                # Format the formulation into a structured prompt
-                prompt = format_formulation_prompt(formulation)
-                print(f"Formulation extracted successfully for problem {idx}")
-            except Exception as e:
-                print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
-                print(f"Falling back to raw problem text.")
-                # Fall back to original prompt if formulation fails
-                prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
-        else:
-            # Use raw problem text if formulation is skipped
-            prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
-
         if log_to_file:
             # Create log file for this question
             model_name = model_id.replace('/', '-').replace('.', '_')
@@ -241,10 +225,73 @@ def process_single_problem(args_tuple):
             original_stderr = sys.stderr
 
             try:
-                # Open log file for Phase 1 (Problem Solving)
+                # Open log file and capture all output including formulation extraction
                 with open(log_file, 'w', encoding='utf-8') as f_log:
                     # Write header
                     f_log.write(f"=== Dataset: {dataset_name} | Model: {model_id} | Question {idx} ===\n\n")
+
+                    # Extract structured formulation from raw problem text (if enabled)
+                    formulation_confidence_data = None
+                    prompt = None
+
+                    if not skip_formulation:
+                        f_log.write(f"=== PHASE 0: FORMULATION EXTRACTION ===\n\n")
+                        f_log.write(f"Original Problem:\n{question}\n\n")
+                        f_log.write(f"{'='*80}\n\n")
+
+                        # Wrap file with ANSI code stripper
+                        clean_log = CleanOutputFile(f_log)
+
+                        # Redirect stdout/stderr to capture formulation extraction output
+                        sys.stdout = clean_log
+                        sys.stderr = clean_log
+
+                        try:
+                            if use_iterative_refinement:
+                                # Use iterative refinement with confidence evaluation
+                                print(f"Extracting formulation with iterative refinement for problem {idx}...")
+                                formulation, evaluation, num_iterations = extract_formulation_with_refinement(
+                                    problem_text=question,
+                                    max_iterations=max_refinement_iterations,
+                                    formulation_model=formulation_model,
+                                    evaluation_model=formulation_model,
+                                    verbose=True
+                                )
+                                formulation_confidence_data = {
+                                    "evaluation": evaluation,
+                                    "num_iterations": num_iterations
+                                }
+                                print(f"\nFormulation refined in {num_iterations} iteration(s) for problem {idx}")
+                                print(f"Final confidence: {evaluation.get('overall_confidence', 'N/A')}/100")
+                            else:
+                                # Use simple extraction without refinement
+                                formulation_client = create_instructor_client(timeout=90.0)
+                                print(f"Extracting formulation for problem {idx}...")
+                                formulation = extract_formulation(
+                                    problem_text=question,
+                                    client=formulation_client,
+                                    model=formulation_model
+                                )
+                                print(f"Formulation extracted successfully for problem {idx}")
+
+                            # Format the formulation into a structured prompt
+                            prompt = format_formulation_prompt(formulation)
+
+                        except Exception as e:
+                            print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
+                            print(f"Falling back to raw problem text.")
+                            # Fall back to original prompt if formulation fails
+                            prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+
+                        # Restore stdout/stderr
+                        sys.stdout = original_stdout
+                        sys.stderr = original_stderr
+
+                        f_log.write(f"\n{'='*80}\n\n")
+                    else:
+                        # Use raw problem text if formulation is skipped
+                        prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+
                     f_log.write(f"=== PHASE 1: PROBLEM SOLVING ===\n\n")
                     f_log.write(f"Prompt:\n{prompt}\n\n")
                     f_log.write(f"{'='*80}\n\n")
@@ -286,6 +333,48 @@ def process_single_problem(args_tuple):
                 sys.stdout = original_stdout
                 sys.stderr = original_stderr
         else:
+            # No logging - extract formulation and run agent
+            formulation_confidence_data = None
+            if not skip_formulation:
+                try:
+                    if use_iterative_refinement:
+                        # Use iterative refinement with confidence evaluation
+                        print(f"Extracting formulation with iterative refinement for problem {idx}...")
+                        formulation, evaluation, num_iterations = extract_formulation_with_refinement(
+                            problem_text=question,
+                            max_iterations=max_refinement_iterations,
+                            formulation_model=formulation_model,
+                            evaluation_model=formulation_model,
+                            verbose=True
+                        )
+                        formulation_confidence_data = {
+                            "evaluation": evaluation,
+                            "num_iterations": num_iterations
+                        }
+                        print(f"Formulation refined in {num_iterations} iteration(s) for problem {idx}")
+                        print(f"Final confidence: {evaluation.get('overall_confidence', 'N/A')}/100")
+                    else:
+                        # Use simple extraction without refinement
+                        formulation_client = create_instructor_client(timeout=90.0)
+                        print(f"Extracting formulation for problem {idx}...")
+                        formulation = extract_formulation(
+                            problem_text=question,
+                            client=formulation_client,
+                            model=formulation_model
+                        )
+                        print(f"Formulation extracted successfully for problem {idx}")
+
+                    # Format the formulation into a structured prompt
+                    prompt = format_formulation_prompt(formulation)
+                except Exception as e:
+                    print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
+                    print(f"Falling back to raw problem text.")
+                    # Fall back to original prompt if formulation fails
+                    prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+            else:
+                # Use raw problem text if formulation is skipped
+                prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+
             try:
                 agent_response = manager_agent.run(prompt, reset=True)
                 # Try to extract a number from the response
@@ -370,6 +459,10 @@ def process_single_problem(args_tuple):
             "correct": correct,
         }
 
+        # Add formulation confidence data if available
+        if formulation_confidence_data is not None:
+            result["formulation_confidence"] = formulation_confidence_data
+
         print(f"Problem {idx}: Correct={correct} | Gold={gold_answer} | Predicted={predicted}")
 
         return result
@@ -395,7 +488,9 @@ def run_experiment(
     log_to_file=False,
     num_processes=None,
     skip_formulation=False,
-    formulation_model="gpt-4o-mini"
+    formulation_model="gpt-4o-mini",
+    use_iterative_refinement=False,
+    max_refinement_iterations=3
 ):
     """
     Run experiments on the full dataset.
@@ -440,7 +535,7 @@ def run_experiment(
         dataset_name = "BWOR"
 
     # Create logs directory
-    log_dir = Path(output_path).parent / "logs" / "v10"
+    log_dir = Path(output_path).parent / "logs" / "v11"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Load all problems from dataset that are >= start_index
@@ -463,7 +558,8 @@ def run_experiment(
     # Prepare arguments for each problem
     args_list = [
         (item, model_id, knowledge_base_directory, index_dir, mode,
-         log_to_file, log_dir, dataset_name, output_path, skip_formulation, formulation_model)
+         log_to_file, log_dir, dataset_name, output_path, skip_formulation, formulation_model,
+         use_iterative_refinement, max_refinement_iterations)
         for item in problems_to_process
     ]
 
@@ -518,6 +614,10 @@ Mode options:
                        help="Skip formulation extraction and use raw problem text directly")
     parser.add_argument("--formulation_model", type=str, default="o4-mini",
                        help="Model to use for formulation extraction (default: o4-mini)")
+    parser.add_argument("--use_iterative_refinement", action="store_true",
+                       help="Use iterative refinement with confidence evaluation for formulation extraction")
+    parser.add_argument("--max_refinement_iterations", type=int, default=3,
+                       help="Maximum number of refinement iterations (default: 3)")
     args = parser.parse_args()
 
     # Determine mode from arguments
@@ -531,12 +631,12 @@ Mode options:
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v10").resolve()
+        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v11").resolve()
     if args.output is None:
         # Include mode in filename
-        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v10.jsonl").resolve()
+        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v11.jsonl").resolve()
 
-    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v10").resolve()
+    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v11").resolve()
 
     run_experiment(
         dataset_path=f"apps/operations_research/datasets/{args.dataset}/{args.dataset}.jsonl",
@@ -551,4 +651,6 @@ Mode options:
         num_processes=args.num_processes,
         skip_formulation=args.skip_formulation,
         formulation_model=args.formulation_model,
+        use_iterative_refinement=args.use_iterative_refinement,
+        max_refinement_iterations=args.max_refinement_iterations,
     )
