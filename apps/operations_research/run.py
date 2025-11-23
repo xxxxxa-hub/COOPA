@@ -64,31 +64,41 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
     Path(knowledge_base_directory).mkdir(parents=True, exist_ok=True)
     print(f"Knowledge base directory: {knowledge_base_directory}")
 
-    # Instantiate indexer (auto sync + live updates) ---------------------------
-    idx = RepoIndexer(
-        knowledge_base_directory,
-        watch=False,
-        index_dir=Path(index_dir),
-        embed_model="text-embedding-3-large",
-        openai_api_key=os.getenv("OPENAI_API_KEY"),
-    )
-    print("[demo] Initial index built.\n")
+    # Conditionally create indexer and knowledge agents based on mode
+    idx = None
+    knowledge_retrieval_agent = None
+    knowledge_curation_agent = None
 
-    # Create the knowledge retrieval agent
-    knowledge_retrieval_agent = create_knowledge_retrieval_agent(
-        idx,
-        working_directory=working_directory,
-        model_id=model_id,
-        verbosity_level=LogLevel.DEBUG,
-        max_steps=20
-    )
-    # Create the knowledge curation agent
-    knowledge_curation_agent = create_knowledge_curation_agent(
-        idx,
-        working_directory=working_directory,
-        model_id=model_id,
-        verbosity_level=LogLevel.DEBUG
-    )
+    if mode != "no-retrieval":
+        # Instantiate indexer (auto sync + live updates) for retrieval and curation modes
+        idx = RepoIndexer(
+            knowledge_base_directory,
+            watch=False,
+            index_dir=Path(index_dir),
+            embed_model="text-embedding-3-large",
+            openai_api_key=os.getenv("OPENAI_API_KEY"),
+        )
+        print("[demo] Initial index built.\n")
+
+        if mode == "retrieval":
+            # Create the knowledge retrieval agent
+            knowledge_retrieval_agent = create_knowledge_retrieval_agent(
+                idx,
+                working_directory=working_directory,
+                model_id=model_id,
+                verbosity_level=LogLevel.DEBUG,
+                max_steps=20
+            )
+        elif mode == "curation":
+            # Create the knowledge curation agent
+            knowledge_curation_agent = create_knowledge_curation_agent(
+                idx,
+                working_directory=working_directory,
+                model_id=model_id,
+                verbosity_level=LogLevel.DEBUG
+            )
+    else:
+        print("[demo] Running in no-retrieval mode - skipping indexer and knowledge agents.\n")
 
     # Configure managed agents for optimizer agents based on mode
     # if mode == "curation":
