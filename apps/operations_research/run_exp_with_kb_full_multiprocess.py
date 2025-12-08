@@ -193,7 +193,7 @@ def process_single_problem(args_tuple):
         dict: Result dictionary for this problem
     """
     (item, model_id, knowledge_base_directory, index_dir, mode,
-     log_to_file, log_dir, dataset_name, output_path, skip_formulation, formulation_model,
+     log_to_file, log_dir, dataset_name, output_path, skip_formulation,
      use_iterative_refinement, max_refinement_iterations) = args_tuple
 
     # Normalize dataset item keys to handle different formats (BWOR vs industryor)
@@ -253,8 +253,8 @@ def process_single_problem(args_tuple):
                                 formulation, evaluation, num_iterations = extract_formulation_with_refinement(
                                     problem_text=question,
                                     max_iterations=max_refinement_iterations,
-                                    formulation_model=formulation_model,
-                                    evaluation_model=formulation_model,
+                                    formulation_model=model_id,
+                                    evaluation_model=model_id,
                                     verbose=True
                                 )
                                 formulation_confidence_data = {
@@ -270,7 +270,7 @@ def process_single_problem(args_tuple):
                                 formulation = extract_formulation(
                                     problem_text=question,
                                     client=formulation_client,
-                                    model=formulation_model
+                                    model=model_id
                                 )
                                 print(f"Formulation extracted successfully for problem {idx}")
 
@@ -343,8 +343,8 @@ def process_single_problem(args_tuple):
                         formulation, evaluation, num_iterations = extract_formulation_with_refinement(
                             problem_text=question,
                             max_iterations=max_refinement_iterations,
-                            formulation_model=formulation_model,
-                            evaluation_model=formulation_model,
+                            formulation_model=model_id,
+                            evaluation_model=model_id,
                             verbose=True
                         )
                         formulation_confidence_data = {
@@ -360,7 +360,7 @@ def process_single_problem(args_tuple):
                         formulation = extract_formulation(
                             problem_text=question,
                             client=formulation_client,
-                            model=formulation_model
+                            model=model_id
                         )
                         print(f"Formulation extracted successfully for problem {idx}")
 
@@ -488,7 +488,6 @@ def run_experiment(
     log_to_file=False,
     num_processes=None,
     skip_formulation=False,
-    formulation_model="gpt-4o-mini",
     use_iterative_refinement=False,
     max_refinement_iterations=3
 ):
@@ -527,12 +526,16 @@ def run_experiment(
     # CustomSmolagentsInstrumentor().instrument(tracer_provider=trace_provider)
     if "nlp4lp" in dataset_path:
         dataset_name = "nlp4lp"
-    elif "nlp4opt" in dataset_path:
-        dataset_name = "nlp4opt"
+    elif "nl4opt" in dataset_path:
+        dataset_name = "nl4opt"
     elif "industryor" in dataset_path:
         dataset_name = "industryor"
     elif "BWOR" in dataset_path:
         dataset_name = "BWOR"
+    elif "complexlp" in dataset_path:
+        dataset_name = "complexlp"
+    elif "easylp" in dataset_path:
+        dataset_name = "easylp"
 
     # Create logs directory
     log_dir = Path(output_path).parent / "logs" / "v11"
@@ -558,7 +561,7 @@ def run_experiment(
     # Prepare arguments for each problem
     args_list = [
         (item, model_id, knowledge_base_directory, index_dir, mode,
-         log_to_file, log_dir, dataset_name, output_path, skip_formulation, formulation_model,
+         log_to_file, log_dir, dataset_name, output_path, skip_formulation,
          use_iterative_refinement, max_refinement_iterations)
         for item in problems_to_process
     ]
@@ -591,8 +594,8 @@ Mode options:
   --retrieval     : Phase 1 only, uses existing KB with retrieval (includes knowledge_retrieval_agent) [DEFAULT]
         """
     )
-    parser.add_argument("--dataset", type=str, default="nlp4opt")
-    parser.add_argument("--model_id", type=str, default="gpt-4.1")
+    parser.add_argument("--dataset", type=str, default="industryor")
+    parser.add_argument("--model_id", type=str, default="o4-mini")
     parser.add_argument("--knowledge_base_directory", type=str, default=None)
     parser.add_argument("--output", type=str)
     parser.add_argument("--start_index", type=int, default=0, help="Starting index for experiments (default: 0)")
@@ -612,8 +615,6 @@ Mode options:
                        help="Number of parallel processes to use (default: number of CPU cores)")
     parser.add_argument("--skip_formulation", action="store_true",
                        help="Skip formulation extraction and use raw problem text directly")
-    parser.add_argument("--formulation_model", type=str, default="o4-mini",
-                       help="Model to use for formulation extraction (default: o4-mini)")
     parser.add_argument("--use_iterative_refinement", action="store_true",
                        help="Use iterative refinement with confidence evaluation for formulation extraction")
     parser.add_argument("--max_refinement_iterations", type=int, default=3,
@@ -650,7 +651,6 @@ Mode options:
         log_to_file=args.log_to_file,
         num_processes=args.num_processes,
         skip_formulation=args.skip_formulation,
-        formulation_model=args.formulation_model,
         use_iterative_refinement=args.use_iterative_refinement,
         max_refinement_iterations=args.max_refinement_iterations,
     )

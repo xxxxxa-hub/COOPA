@@ -191,7 +191,6 @@ def run_experiment(
     mode="retrieval",
     log_to_file=False,
     skip_formulation=False,
-    formulation_model="gpt-4o-mini",
     use_iterative_refinement=False,
     max_refinement_iterations=3
 ):
@@ -251,7 +250,7 @@ def run_experiment(
     # Create instructor client for formulation extraction (if not skipped)
     formulation_client = None
     if not skip_formulation:
-        print(f"Initializing formulation extraction client (using model: {formulation_model})...")
+        print(f"Initializing formulation extraction client (using model: {model_id})...")
         formulation_client = create_instructor_client(timeout=90.0)
     else:
         print("Formulation extraction is disabled. Using raw problem text.")
@@ -322,8 +321,8 @@ def run_experiment(
                                     formulation, evaluation, num_iterations = extract_formulation_with_refinement(
                                         problem_text=question,
                                         max_iterations=max_refinement_iterations,
-                                        formulation_model=formulation_model,
-                                        evaluation_model=formulation_model,
+                                        formulation_model=model_id,
+                                        evaluation_model=model_id,
                                         verbose=True
                                     )
                                     formulation_confidence_data = {
@@ -338,7 +337,7 @@ def run_experiment(
                                     formulation = extract_formulation(
                                         problem_text=question,
                                         client=formulation_client,
-                                        model=formulation_model
+                                        model=model_id
                                     )
                                     print(f"Formulation extracted successfully for problem {idx}")
 
@@ -410,8 +409,8 @@ def run_experiment(
                             formulation, evaluation, num_iterations = extract_formulation_with_refinement(
                                 problem_text=question,
                                 max_iterations=max_refinement_iterations,
-                                formulation_model=formulation_model,
-                                evaluation_model=formulation_model,
+                                formulation_model=model_id,
+                                evaluation_model=model_id,
                                 verbose=True
                             )
                             formulation_confidence_data = {
@@ -426,7 +425,7 @@ def run_experiment(
                             formulation = extract_formulation(
                                 problem_text=question,
                                 client=formulation_client,
-                                model=formulation_model
+                                model=model_id
                             )
                             print(f"Formulation extracted successfully for problem {idx}")
 
@@ -568,8 +567,6 @@ Mode options:
                        help="Enable logging of agent output to individual log files for each question")
     parser.add_argument("--skip_formulation", action="store_true",
                        help="Skip formulation extraction and use raw problem text directly")
-    parser.add_argument("--formulation_model", type=str, default="o4-mini",
-                       help="Model to use for formulation extraction (default: o4-mini)")
     parser.add_argument("--use_iterative_refinement", action="store_true",
                        help="Use iterative refinement with confidence evaluation for formulation extraction")
     parser.add_argument("--max_refinement_iterations", type=int, default=3,
@@ -605,7 +602,6 @@ Mode options:
         mode=mode,
         log_to_file=args.log_to_file,
         skip_formulation=args.skip_formulation,
-        formulation_model=args.formulation_model,
         use_iterative_refinement=args.use_iterative_refinement,
         max_refinement_iterations=args.max_refinement_iterations,
     )

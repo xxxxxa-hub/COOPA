@@ -58,6 +58,12 @@ from .or_agents.formulation import (
     OptimizationFormulation
 )
 
+# Import iterative formulation refinement
+from .or_agents.iterative_formulation import (
+    extract_formulation_with_refinement,
+    format_formulation_for_evaluation
+)
+
 def strip_ansi_codes(text):
     """Remove ANSI escape codes from text."""
     ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -81,6 +87,44 @@ class CleanOutputFile:
 def get_current_timestamp():
     now = datetime.now()
     return now.strftime("%Y%m%d_%H%M%S")
+
+def normalize_dataset_item(item):
+    """
+    Normalize dataset item keys to handle different dataset formats.
+
+    Supports:
+    - BWOR format: {"question", "answer", "index"}
+    - industryor/other formats: {"en_question", "en_answer", "id"}
+
+    Returns a normalized dict with keys: "question", "answer", "id"
+    """
+    normalized = {}
+
+    # Handle question key
+    if "en_question" in item:
+        normalized["question"] = item["en_question"]
+    elif "question" in item:
+        normalized["question"] = item["question"]
+    else:
+        raise ValueError("Item missing both 'en_question' and 'question' keys")
+
+    # Handle answer key
+    if "en_answer" in item:
+        normalized["answer"] = item["en_answer"]
+    elif "answer" in item:
+        normalized["answer"] = item["answer"]
+    else:
+        raise ValueError("Item missing both 'en_answer' and 'answer' keys")
+
+    # Handle id/index key
+    if "id" in item:
+        normalized["id"] = item["id"]
+    elif "index" in item:
+        normalized["id"] = item["index"]
+    else:
+        raise ValueError("Item missing both 'id' and 'index' keys")
+
+    return normalized
 
 def format_formulation_prompt(formulation: OptimizationFormulation) -> str:
     """
@@ -146,7 +190,8 @@ def run_experiment(
     mode="retrieval",
     log_to_file=False,
     skip_formulation=False,
-    formulation_model="gpt-4o-mini"
+    use_iterative_refinement=False,
+    max_refinement_iterations=3
 ):
     """
     Run experiments on selected problem indices.
@@ -208,7 +253,7 @@ def run_experiment(
     # Create instructor client for formulation extraction (if not skipped)
     formulation_client = None
     if not skip_formulation:
-        print(f"Initializing formulation extraction client (using model: {formulation_model})...")
+        print(f"Initializing formulation extraction client (using model: {model_id})...")
         formulation_client = create_instructor_client(timeout=90.0)
     else:
         print("Formulation extraction is disabled. Using raw problem text.")
@@ -216,15 +261,18 @@ def run_experiment(
     results = []
 
     # Create logs directory
-    log_dir = Path(output_path).parent / "logs" / "v10"
+    log_dir = Path(output_path).parent / "logs" / "v11"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     with open(dataset_path, "r", encoding="utf-8") as f:
         for line in f:
             item = json.loads(line)
-            question = item["en_question"]
-            gold_answer = item["en_answer"]
-            idx = item.get("id", None)
+
+            # Normalize dataset item keys to handle different formats (BWOR vs industryor)
+            normalized_item = normalize_dataset_item(item)
+            question = normalized_item["question"]
+            gold_answer = normalized_item["answer"]
+            idx = normalized_item["id"]
 
             # Skip problems not in indices if filtering is enabled
             if indices is not None and int(idx) not in indices:
@@ -238,17 +286,37 @@ def run_experiment(
             # with using_session(session_id=session_id):
 
             # Extract structured formulation from raw problem text (if enabled)
+            formulation_confidence_data = None
             if not skip_formulation and formulation_client is not None:
                 try:
-                    print(f"Extracting formulation for problem {idx}...")
-                    formulation = extract_formulation(
-                        problem_text=question,
-                        client=formulation_client,
-                        model=formulation_model
-                    )
+                    if use_iterative_refinement:
+                        # Use iterative refinement with confidence evaluation
+                        print(f"Extracting formulation with iterative refinement for problem {idx}...")
+                        formulation, evaluation, num_iterations = extract_formulation_with_refinement(
+                            problem_text=question,
+                            max_iterations=max_refinement_iterations,
+                            formulation_model=model_id,
+                            evaluation_model=model_id,
+                            verbose=True
+                        )
+                        formulation_confidence_data = {
+                            "evaluation": evaluation,
+                            "num_iterations": num_iterations
+                        }
+                        print(f"\nFormulation refined in {num_iterations} iteration(s) for problem {idx}")
+                        print(f"Final confidence: {evaluation.get('overall_confidence', 'N/A')}/100")
+                    else:
+                        # Use simple extraction without refinement
+                        print(f"Extracting formulation for problem {idx}...")
+                        formulation = extract_formulation(
+                            problem_text=question,
+                            client=formulation_client,
+                            model=model_id
+                        )
+                        print(f"Formulation extracted successfully for problem {idx}")
+
                     # Format the formulation into a structured prompt
                     prompt = format_formulation_prompt(formulation)
-                    print(f"Formulation extracted successfully for problem {idx}")
                 except Exception as e:
                     print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
                     print(f"Falling back to raw problem text.")
@@ -338,6 +406,11 @@ def run_experiment(
                 "agent_response": agent_response,
                 "correct": correct,
             }
+
+            # Add formulation confidence data if available
+            if formulation_confidence_data is not None:
+                result["formulation_confidence"] = formulation_confidence_data
+
             print(f"Problem {idx}: Correct={correct} | Gold={gold_answer} | Predicted={predicted}")
             results.append(result)
 
@@ -439,8 +512,10 @@ Mode options:
                        help="Enable logging of agent output to individual log files for each question")
     parser.add_argument("--skip_formulation", action="store_true",
                        help="Skip formulation extraction and use raw problem text directly")
-    parser.add_argument("--formulation_model", type=str, default="o4-mini",
-                       help="Model to use for formulation extraction (default: o4-mini)")
+    parser.add_argument("--use_iterative_refinement", action="store_true",
+                       help="Use iterative refinement with confidence evaluation for formulation extraction")
+    parser.add_argument("--max_refinement_iterations", type=int, default=3,
+                       help="Maximum number of refinement iterations (default: 3)")
     args = parser.parse_args()
 
     # Determine mode from arguments
@@ -454,12 +529,12 @@ Mode options:
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v10").resolve()
+        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v11").resolve()
     if args.output is None:
         # Include mode in filename
-        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v10.jsonl").resolve()
+        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v11.jsonl").resolve()
 
-    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v10").resolve()
+    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v11").resolve()
 
     # Parse indices
     try:
@@ -480,5 +555,6 @@ Mode options:
         mode=mode,
         log_to_file=args.log_to_file,
         skip_formulation=args.skip_formulation,
-        formulation_model=args.formulation_model,
+        use_iterative_refinement=args.use_iterative_refinement,
+        max_refinement_iterations=args.max_refinement_iterations,
     )
