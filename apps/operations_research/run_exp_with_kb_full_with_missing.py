@@ -44,6 +44,8 @@ import argparse
 import tempfile
 import os
 import shutil
+import multiprocessing
+from multiprocessing import Pool
 
 from datetime import datetime
 from .run import create_manager_agent
@@ -178,6 +180,299 @@ def format_formulation_prompt(formulation: OptimizationFormulation) -> str:
 
     return "\n".join(prompt_parts)
 
+def process_single_problem(args_tuple):
+    """
+    Worker function to process a single problem.
+    This function will be called by each multiprocessing worker.
+
+    Args:
+        args_tuple: Tuple containing all necessary parameters
+
+    Returns:
+        dict: Result dictionary for this problem
+    """
+    (item, model_id, knowledge_base_directory, index_dir, mode,
+     log_to_file, log_dir, dataset_name, output_path, skip_formulation,
+     use_iterative_refinement, max_refinement_iterations) = args_tuple
+
+    # Normalize dataset item keys to handle different formats (BWOR vs industryor)
+    normalized_item = normalize_dataset_item(item)
+    question = normalized_item["question"]
+    gold_answer = normalized_item["answer"]
+    idx = normalized_item["id"]
+
+    # Create a unique working directory for this process
+    working_directory = tempfile.mkdtemp(prefix=f"or_problem_{idx}_")
+
+    try:
+        # Create manager agent for this worker
+        manager_agent = create_manager_agent(
+            model_id=model_id,
+            knowledge_base_directory=knowledge_base_directory,
+            index_dir=index_dir,
+            working_directory=working_directory,
+            mode=mode,
+        )
+
+        if log_to_file:
+            # Create log file for this question
+            model_name = model_id.replace('/', '-').replace('.', '_')
+            log_file = log_dir / f"{dataset_name}_{model_name}_{mode}_question_{idx}_log.txt"
+
+            # Save original stdout/stderr
+            original_stdout = sys.stdout
+            original_stderr = sys.stderr
+
+            try:
+                # Open log file and capture all output including formulation extraction
+                with open(log_file, 'w', encoding='utf-8') as f_log:
+                    # Write header
+                    f_log.write(f"=== Dataset: {dataset_name} | Model: {model_id} | Question {idx} ===\n\n")
+
+                    # Extract structured formulation from raw problem text (if enabled)
+                    formulation_confidence_data = None
+                    prompt = None
+
+                    if not skip_formulation:
+                        f_log.write(f"=== PHASE 0: FORMULATION EXTRACTION ===\n\n")
+                        f_log.write(f"Original Problem:\n{question}\n\n")
+                        f_log.write(f"{'='*80}\n\n")
+
+                        # Wrap file with ANSI code stripper
+                        clean_log = CleanOutputFile(f_log)
+
+                        # Redirect stdout/stderr to capture formulation extraction output
+                        sys.stdout = clean_log
+                        sys.stderr = clean_log
+
+                        try:
+                            if use_iterative_refinement:
+                                # Use iterative refinement with confidence evaluation
+                                print(f"Extracting formulation with iterative refinement for problem {idx}...")
+                                formulation, evaluation, num_iterations = extract_formulation_with_refinement(
+                                    problem_text=question,
+                                    max_iterations=max_refinement_iterations,
+                                    formulation_model=model_id,
+                                    evaluation_model=model_id,
+                                    verbose=True
+                                )
+                                formulation_confidence_data = {
+                                    "evaluation": evaluation,
+                                    "num_iterations": num_iterations
+                                }
+                                print(f"\nFormulation refined in {num_iterations} iteration(s) for problem {idx}")
+                                print(f"Final confidence: {evaluation.get('overall_confidence', 'N/A')}/100")
+                            else:
+                                # Use simple extraction without refinement
+                                formulation_client = create_instructor_client(timeout=90.0)
+                                print(f"Extracting formulation for problem {idx}...")
+                                formulation = extract_formulation(
+                                    problem_text=question,
+                                    client=formulation_client,
+                                    model=model_id
+                                )
+                                print(f"Formulation extracted successfully for problem {idx}")
+
+                            # Format the formulation into a structured prompt
+                            prompt = format_formulation_prompt(formulation)
+
+                        except Exception as e:
+                            print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
+                            print(f"Falling back to raw problem text.")
+                            # Fall back to original prompt if formulation fails
+                            prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+
+                        # Restore stdout/stderr
+                        sys.stdout = original_stdout
+                        sys.stderr = original_stderr
+
+                        f_log.write(f"\n{'='*80}\n\n")
+                    else:
+                        # Use raw problem text if formulation is skipped
+                        prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+
+                    f_log.write(f"=== PHASE 1: PROBLEM SOLVING ===\n\n")
+                    f_log.write(f"Prompt:\n{prompt}\n\n")
+                    f_log.write(f"{'='*80}\n\n")
+
+                    # Wrap file with ANSI code stripper
+                    clean_log = CleanOutputFile(f_log)
+
+                    # Redirect stdout/stderr to clean file wrapper
+                    sys.stdout = clean_log
+                    sys.stderr = clean_log
+
+                    try:
+                        agent_response = manager_agent.run(prompt, reset=True)
+                        # Try to extract a number from the response
+                        match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
+                        if match:
+                            predicted = float(match.group())
+                            correct = abs(predicted - float(gold_answer)) < 0.1
+                        else:
+                            predicted = None
+                            correct = False
+                    except Exception as e:
+                        agent_response = str(e)
+                        predicted = None
+                        correct = False
+
+                    # Restore stdout/stderr before writing summary
+                    sys.stdout = original_stdout
+                    sys.stderr = original_stderr
+
+                    # Write Phase 1 summary to log file
+                    f_log.write(f"\n{'='*80}\n")
+                    f_log.write(f"Phase 1 Final Response: {agent_response}\n")
+                    f_log.write(f"\nGold Answer: {gold_answer}\n")
+                    f_log.write(f"Predicted Answer: {predicted}\n")
+                    f_log.write(f"Correct: {correct}\n")
+            finally:
+                # Always restore stdout/stderr even if there's an error
+                sys.stdout = original_stdout
+                sys.stderr = original_stderr
+        else:
+            # No logging - extract formulation and run agent
+            formulation_confidence_data = None
+            if not skip_formulation:
+                try:
+                    if use_iterative_refinement:
+                        # Use iterative refinement with confidence evaluation
+                        print(f"Extracting formulation with iterative refinement for problem {idx}...")
+                        formulation, evaluation, num_iterations = extract_formulation_with_refinement(
+                            problem_text=question,
+                            max_iterations=max_refinement_iterations,
+                            formulation_model=model_id,
+                            evaluation_model=model_id,
+                            verbose=True
+                        )
+                        formulation_confidence_data = {
+                            "evaluation": evaluation,
+                            "num_iterations": num_iterations
+                        }
+                        print(f"Formulation refined in {num_iterations} iteration(s) for problem {idx}")
+                        print(f"Final confidence: {evaluation.get('overall_confidence', 'N/A')}/100")
+                    else:
+                        # Use simple extraction without refinement
+                        formulation_client = create_instructor_client(timeout=90.0)
+                        print(f"Extracting formulation for problem {idx}...")
+                        formulation = extract_formulation(
+                            problem_text=question,
+                            client=formulation_client,
+                            model=model_id
+                        )
+                        print(f"Formulation extracted successfully for problem {idx}")
+
+                    # Format the formulation into a structured prompt
+                    prompt = format_formulation_prompt(formulation)
+                except Exception as e:
+                    print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
+                    print(f"Falling back to raw problem text.")
+                    # Fall back to original prompt if formulation fails
+                    prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+            else:
+                # Use raw problem text if formulation is skipped
+                prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+
+            try:
+                agent_response = manager_agent.run(prompt, reset=True)
+                # Try to extract a number from the response
+                match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
+                if match:
+                    predicted = float(match.group())
+                    correct = abs(predicted - float(gold_answer)) < 0.1
+                else:
+                    predicted = None
+                    correct = False
+            except Exception as e:
+                agent_response = str(e)
+                predicted = None
+                correct = False
+
+        # Knowledge curation logic (only when mode is "curation")
+        if mode == "curation" and correct:
+            print(f"✓ Solution verified CORRECT. Proceeding with knowledge curation for question {idx}...")
+            try:
+                curation_prompt = """The solution has been verified as correct by the system. Please now proceed with knowledge curation:
+
+1. Ensure the three standard files (parameters.json, solution.py, description.md) exist in the working directory
+2. If they are missing, create them using create_file_with_content tool
+3. Delegate to knowledge_curation_agent to save this knowledge for future use
+4. Call final_answer to confirm the knowledge has been saved"""
+
+                # Log Phase 2 if logging is enabled
+                if log_to_file:
+                    try:
+                        # Append Phase 2 to the existing log file
+                        with open(log_file, 'a', encoding='utf-8') as f_log:
+                            f_log.write(f"\n\n{'='*80}\n")
+                            f_log.write(f"=== PHASE 2: KNOWLEDGE CURATION ===\n\n")
+                            f_log.write(f"Curation Prompt:\n{curation_prompt}\n\n")
+                            f_log.write(f"{'='*80}\n\n")
+
+                            # Wrap file with ANSI code stripper
+                            clean_log = CleanOutputFile(f_log)
+
+                            # Redirect stdout/stderr to clean file wrapper
+                            sys.stdout = clean_log
+                            sys.stderr = clean_log
+
+                            try:
+                                curation_response = manager_agent.run(curation_prompt, reset=False)
+                            finally:
+                                # Restore stdout/stderr
+                                sys.stdout = original_stdout
+                                sys.stderr = original_stderr
+
+                            # Write Phase 2 summary
+                            f_log.write(f"\n{'='*80}\n")
+                            f_log.write(f"Phase 2 Final Response: {curation_response}\n")
+                            f_log.write(f"Knowledge curation completed successfully.\n")
+                    except Exception as e:
+                        # Restore stdout/stderr if error occurs
+                        sys.stdout = original_stdout
+                        sys.stderr = original_stderr
+                        raise e
+                else:
+                    # No logging - just run curation
+                    curation_response = manager_agent.run(curation_prompt, reset=False)
+
+                print(f"✓ Knowledge curation completed for question {idx}")
+            except Exception as e:
+                print(f"✗ Error during knowledge curation for question {idx}: {e}")
+        elif mode == "curation" and not correct:
+            print(f"✗ Solution INCORRECT - skipping knowledge curation for question {idx} (Gold: {gold_answer}, Predicted: {predicted})")
+            # Log that curation was skipped
+            if log_to_file:
+                with open(log_file, 'a', encoding='utf-8') as f_log:
+                    f_log.write(f"\n\n{'='*80}\n")
+                    f_log.write(f"=== PHASE 2: KNOWLEDGE CURATION ===\n\n")
+                    f_log.write(f"Knowledge curation SKIPPED - solution is INCORRECT\n")
+
+        result = {
+            "index": idx,
+            "question": question,
+            "gold_answer": gold_answer,
+            "predicted_answer": predicted,
+            "agent_response": agent_response,
+            "correct": correct,
+        }
+
+        # Add formulation confidence data if available
+        if formulation_confidence_data is not None:
+            result["formulation_confidence"] = formulation_confidence_data
+
+        print(f"Problem {idx}: Correct={correct} | Gold={gold_answer} | Predicted={predicted}")
+
+        return result
+
+    finally:
+        # Clean up the working directory
+        try:
+            shutil.rmtree(working_directory)
+        except Exception as e:
+            print(f"Warning: Could not remove working directory {working_directory}: {e}")
+
 def run_experiment(
     dataset_path,
     cur_date_time,
@@ -189,6 +484,7 @@ def run_experiment(
     indices=None,
     mode="retrieval",
     log_to_file=False,
+    num_processes=None,
     skip_formulation=False,
     use_iterative_refinement=False,
     max_refinement_iterations=3
@@ -238,246 +534,56 @@ def run_experiment(
         dataset_name = "industryor"
     elif "BWOR" in dataset_path:
         dataset_name = "BWOR"
+    elif "complexlp" in dataset_path:
+        dataset_name = "complexlp"
+    elif "easylp" in dataset_path:
+        dataset_name = "easylp"
 
-    if working_directory is None:
-        working_directory = tempfile.mkdtemp()
-
-    manager_agent = create_manager_agent(
-        model_id=model_id,
-        knowledge_base_directory=knowledge_base_directory,
-        index_dir=index_dir,
-        working_directory=working_directory,
-        mode=mode,
-    )
-
-    # Create instructor client for formulation extraction (if not skipped)
-    formulation_client = None
-    if not skip_formulation:
-        print(f"Initializing formulation extraction client (using model: {model_id})...")
-        formulation_client = create_instructor_client(timeout=90.0)
-    else:
-        print("Formulation extraction is disabled. Using raw problem text.")
-
-    results = []
 
     # Create logs directory
-    log_dir = Path(output_path).parent / "logs" / "v11"
+    log_dir = Path(output_path).parent / "logs" / "v11_debug"
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    # Load all problems from dataset that match the indices filter
+    problems_to_process = []
     with open(dataset_path, "r", encoding="utf-8") as f:
         for line in f:
             item = json.loads(line)
 
             # Normalize dataset item keys to handle different formats (BWOR vs industryor)
             normalized_item = normalize_dataset_item(item)
-            question = normalized_item["question"]
-            gold_answer = normalized_item["answer"]
             idx = normalized_item["id"]
 
             # Skip problems not in indices if filtering is enabled
             if indices is not None and int(idx) not in indices:
                 continue
 
-            # session_id = f"{cur_date_time}_{dataset_name}_{idx}"
+            problems_to_process.append(item)
 
-            # Clear the working directory for each new problem
-            shutil.rmtree(working_directory)
-            os.makedirs(working_directory, exist_ok=True)
-            # with using_session(session_id=session_id):
+    print(f"Processing {len(problems_to_process)} problems")
 
-            # Extract structured formulation from raw problem text (if enabled)
-            formulation_confidence_data = None
-            if not skip_formulation and formulation_client is not None:
-                try:
-                    if use_iterative_refinement:
-                        # Use iterative refinement with confidence evaluation
-                        print(f"Extracting formulation with iterative refinement for problem {idx}...")
-                        formulation, evaluation, num_iterations = extract_formulation_with_refinement(
-                            problem_text=question,
-                            max_iterations=max_refinement_iterations,
-                            formulation_model=model_id,
-                            evaluation_model=model_id,
-                            verbose=True
-                        )
-                        formulation_confidence_data = {
-                            "evaluation": evaluation,
-                            "num_iterations": num_iterations
-                        }
-                        print(f"\nFormulation refined in {num_iterations} iteration(s) for problem {idx}")
-                        print(f"Final confidence: {evaluation.get('overall_confidence', 'N/A')}/100")
-                    else:
-                        # Use simple extraction without refinement
-                        print(f"Extracting formulation for problem {idx}...")
-                        formulation = extract_formulation(
-                            problem_text=question,
-                            client=formulation_client,
-                            model=model_id
-                        )
-                        print(f"Formulation extracted successfully for problem {idx}")
+    # Prepare arguments for each problem
+    args_list = [
+        (item, model_id, knowledge_base_directory, index_dir, mode,
+         log_to_file, log_dir, dataset_name, output_path, skip_formulation,
+         use_iterative_refinement, max_refinement_iterations)
+        for item in problems_to_process
+    ]
 
-                    # Format the formulation into a structured prompt
-                    prompt = format_formulation_prompt(formulation)
-                except Exception as e:
-                    print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
-                    print(f"Falling back to raw problem text.")
-                    # Fall back to original prompt if formulation fails
-                    prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
-            else:
-                # Use raw problem text if formulation is skipped
-                prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+    # Determine number of processes
+    if num_processes is None:
+        num_processes = multiprocessing.cpu_count()
 
-            if log_to_file:
-                # Create log file for this question
-                model_name = model_id.replace('/', '-').replace('.', '_')
-                log_file = log_dir / f"{dataset_name}_{model_name}_{mode}_question_{idx}_log.txt"
+    print(f"Using {num_processes} parallel processes")
 
-                # Save original stdout/stderr
-                original_stdout = sys.stdout
-                original_stderr = sys.stderr
-
-                try:
-                    # Open log file for Phase 1 (Problem Solving)
-                    with open(log_file, 'w', encoding='utf-8') as f_log:
-                        # Write header
-                        f_log.write(f"=== Dataset: {dataset_name} | Model: {model_id} | Question {idx} ===\n\n")
-                        f_log.write(f"=== PHASE 1: PROBLEM SOLVING ===\n\n")
-                        f_log.write(f"Prompt:\n{prompt}\n\n")
-                        f_log.write(f"{'='*80}\n\n")
-
-                        # Wrap file with ANSI code stripper
-                        clean_log = CleanOutputFile(f_log)
-
-                        # Redirect stdout/stderr to clean file wrapper
-                        sys.stdout = clean_log
-                        sys.stderr = clean_log
-
-                        try:
-                            agent_response = manager_agent.run(prompt, reset=True)
-                            # Try to extract a number from the response
-                            import re
-                            match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
-                            if match:
-                                predicted = float(match.group())
-                                correct = abs(predicted - float(gold_answer)) < 0.1
-                            else:
-                                predicted = None
-                                correct = False
-                        except Exception as e:
-                            agent_response = str(e)
-                            predicted = None
-                            correct = False
-
-                        # Restore stdout/stderr before writing summary
-                        sys.stdout = original_stdout
-                        sys.stderr = original_stderr
-
-                        # Write Phase 1 summary to log file
-                        f_log.write(f"\n{'='*80}\n")
-                        f_log.write(f"Phase 1 Final Response: {agent_response}\n")
-                        f_log.write(f"\nGold Answer: {gold_answer}\n")
-                        f_log.write(f"Predicted Answer: {predicted}\n")
-                        f_log.write(f"Correct: {correct}\n")
-                finally:
-                    # Always restore stdout/stderr even if there's an error
-                    sys.stdout = original_stdout
-                    sys.stderr = original_stderr
-            else:
-                try:
-                    agent_response = manager_agent.run(prompt, reset=True)
-                    # Try to extract a number from the response
-                    import re
-                    match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
-                    if match:
-                        predicted = float(match.group())
-                        correct = abs(predicted - float(gold_answer)) < 0.1
-                    else:
-                        predicted = None
-                        correct = False
-                except Exception as e:
-                    agent_response = str(e)
-                    predicted = None
-                    correct = False
-
-            result = {
-                "index": idx,
-                "question": question,
-                "gold_answer": gold_answer,
-                "predicted_answer": predicted,
-                "agent_response": agent_response,
-                "correct": correct,
-            }
-
-            # Add formulation confidence data if available
-            if formulation_confidence_data is not None:
-                result["formulation_confidence"] = formulation_confidence_data
-
-            print(f"Problem {idx}: Correct={correct} | Gold={gold_answer} | Predicted={predicted}")
-            results.append(result)
-
-            # Write results incrementally
+    # Process problems in parallel using multiprocessing
+    with Pool(processes=num_processes) as pool:
+        # Use imap_unordered for better performance (order doesn't matter)
+        # Results will be written to file as they complete
+        for result in pool.imap_unordered(process_single_problem, args_list):
+            # Write results incrementally as they complete
             with open(output_path, "a", encoding="utf-8") as out_f:
                 out_f.write(json.dumps(result) + "\n")
-
-            # Knowledge curation logic (only when mode is "curation")
-            if mode == "curation":
-                if correct:
-                    print(f"✓ Solution verified CORRECT. Proceeding with knowledge curation for question {idx}...")
-                    try:
-                        curation_prompt = """The solution has been verified as correct by the system. Please now proceed with knowledge curation:
-
-1. Ensure the three standard files (parameters.json, solution.py, description.md) exist in the working directory
-2. If they are missing, create them using create_file_with_content tool
-3. Delegate to knowledge_curation_agent to save this knowledge for future use
-4. Call final_answer to confirm the knowledge has been saved"""
-
-                        # Log Phase 2 if logging is enabled
-                        if log_to_file:
-                            try:
-                                # Append Phase 2 to the existing log file
-                                with open(log_file, 'a', encoding='utf-8') as f_log:
-                                    f_log.write(f"\n\n{'='*80}\n")
-                                    f_log.write(f"=== PHASE 2: KNOWLEDGE CURATION ===\n\n")
-                                    f_log.write(f"Curation Prompt:\n{curation_prompt}\n\n")
-                                    f_log.write(f"{'='*80}\n\n")
-
-                                    # Wrap file with ANSI code stripper
-                                    clean_log = CleanOutputFile(f_log)
-
-                                    # Redirect stdout/stderr to clean file wrapper
-                                    sys.stdout = clean_log
-                                    sys.stderr = clean_log
-
-                                    try:
-                                        curation_response = manager_agent.run(curation_prompt, reset=False)
-                                    finally:
-                                        # Restore stdout/stderr
-                                        sys.stdout = original_stdout
-                                        sys.stderr = original_stderr
-
-                                    # Write Phase 2 summary
-                                    f_log.write(f"\n{'='*80}\n")
-                                    f_log.write(f"Phase 2 Final Response: {curation_response}\n")
-                                    f_log.write(f"Knowledge curation completed successfully.\n")
-                            except Exception as e:
-                                # Restore stdout/stderr if error occurs
-                                sys.stdout = original_stdout
-                                sys.stderr = original_stderr
-                                raise e
-                        else:
-                            # No logging - just run curation
-                            curation_response = manager_agent.run(curation_prompt, reset=False)
-
-                        print(f"✓ Knowledge curation completed for question {idx}")
-                    except Exception as e:
-                        print(f"✗ Error during knowledge curation for question {idx}: {e}")
-                else:
-                    print(f"✗ Solution INCORRECT - skipping knowledge curation for question {idx} (Gold: {gold_answer}, Predicted: {predicted})")
-                    # Log that curation was skipped
-                    if log_to_file:
-                        with open(log_file, 'a', encoding='utf-8') as f_log:
-                            f_log.write(f"\n\n{'='*80}\n")
-                            f_log.write(f"=== PHASE 2: KNOWLEDGE CURATION ===\n\n")
-                            f_log.write(f"Knowledge curation SKIPPED - solution is INCORRECT\n")
 
     print(f"Experiment finished. Results saved to {output_path}.")
 
@@ -510,6 +616,8 @@ Mode options:
 
     parser.add_argument("--log_to_file", action="store_true",
                        help="Enable logging of agent output to individual log files for each question")
+    parser.add_argument("--num_processes", type=int, default=None,
+                       help="Number of parallel processes to use (default: number of CPU cores)")
     parser.add_argument("--skip_formulation", action="store_true",
                        help="Skip formulation extraction and use raw problem text directly")
     parser.add_argument("--use_iterative_refinement", action="store_true",
@@ -554,6 +662,7 @@ Mode options:
         indices=indices,
         mode=mode,
         log_to_file=args.log_to_file,
+        num_processes=args.num_processes,
         skip_formulation=args.skip_formulation,
         use_iterative_refinement=args.use_iterative_refinement,
         max_refinement_iterations=args.max_refinement_iterations,
