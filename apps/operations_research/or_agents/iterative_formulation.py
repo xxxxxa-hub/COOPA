@@ -201,35 +201,57 @@ def refine_formulation(
         confidence_evaluation: The confidence evaluation results
         client: Instructor client for extraction
         model: Model to use for refinement
-        formulation_history: List of all candidate formulations with their evaluations
+        formulation_history: List of all previous formulations with their evaluations
 
     Returns:
         Refined OptimizationFormulation
     """
-    # Build candidate formulations section if available
-    candidates_section = ""
+    # Format current formulation
+    current_formulation_str = format_formulation_for_evaluation(current_formulation)
+
+    # Build history section if available
+    history_section = ""
     if formulation_history:
-        candidates_section = "\n\n**CANDIDATE FORMULATIONS:**\n"
+        history_section = "\n\n**HISTORY OF PREVIOUS FORMULATIONS:**\n"
         for entry in formulation_history:
             iteration = entry['iteration']
             past_formulation = entry['formulation']
             past_evaluation = entry['evaluation']
 
             past_formulation_str = format_formulation_for_evaluation(past_formulation)
-            candidates_section += f"\n--- Iteration {iteration} ---\n"
-            candidates_section += f"Formulation:\n{past_formulation_str}\n\n"
-            candidates_section += f"Confidence Scores:\n"
-            candidates_section += f"- Parameters: {past_evaluation['parameters']['confidence']}/100 - {past_evaluation['parameters']['explanation']}\n"
-            candidates_section += f"- Decision Variables: {past_evaluation['decision_variables']['confidence']}/100 - {past_evaluation['decision_variables']['explanation']}\n"
-            candidates_section += f"- Objective: {past_evaluation['objective']['confidence']}/100 - {past_evaluation['objective']['explanation']}\n"
-            candidates_section += f"- Constraints: {past_evaluation['constraints']['confidence']}/100 - {past_evaluation['constraints']['explanation']}\n"
+            history_section += f"\n--- Iteration {iteration} ---\n"
+            history_section += f"Formulation:\n{past_formulation_str}\n\n"
+            history_section += f"Confidence Scores:\n"
+            history_section += f"- Parameters: {past_evaluation['parameters']['confidence']}/100 - {past_evaluation['parameters']['explanation']}\n"
+            history_section += f"- Decision Variables: {past_evaluation['decision_variables']['confidence']}/100 - {past_evaluation['decision_variables']['explanation']}\n"
+            history_section += f"- Objective: {past_evaluation['objective']['confidence']}/100 - {past_evaluation['objective']['explanation']}\n"
+            history_section += f"- Constraints: {past_evaluation['constraints']['confidence']}/100 - {past_evaluation['constraints']['explanation']}\n"
 
     # Create refinement prompt
-    refinement_prompt = f"""You are refining an optimization formulation. Review all candidate formulations and the feedback to create a better formulation.
+    refinement_prompt = f"""You are refining an optimization formulation. Review all previous attempts and the feedback to create a better formulation.
 
 **Original Problem:**
 {raw_question}
-{candidates_section}
+{history_section}
+
+**Current Formulation (Latest Iteration):**
+{current_formulation_str}
+
+**Current Confidence Evaluation:**
+- Parameters: {confidence_evaluation['parameters']['confidence']}/100
+  Issue: {confidence_evaluation['parameters']['explanation']}
+
+- Decision Variables: {confidence_evaluation['decision_variables']['confidence']}/100
+  Issue: {confidence_evaluation['decision_variables']['explanation']}
+
+- Objective: {confidence_evaluation['objective']['confidence']}/100
+  Issue: {confidence_evaluation['objective']['explanation']}
+
+- Constraints: {confidence_evaluation['constraints']['confidence']}/100
+  Issue: {confidence_evaluation['constraints']['explanation']}
+
+**Overall Assessment:**
+{confidence_evaluation['overall_assessment']}
 
 Please create a REFINED formulation that addresses all the identified issues. Learn from what worked well in previous iterations and avoid repeating mistakes. Pay special attention to the components with lower confidence scores. Ensure that:
 1. All parameters are correctly identified and valued
@@ -308,6 +330,11 @@ def extract_formulation_with_refinement(
             print(f"\n{'=' * 80}")
             print(f"ITERATION {iteration}/{max_iterations}")
             print('=' * 80)
+            print()
+            print("Current Formulation:")
+            print("-" * 80)
+            print(format_formulation_for_evaluation(formulation))
+            print("-" * 80)
             print()
             print("Evaluating confidence...")
 
