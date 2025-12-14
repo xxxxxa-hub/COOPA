@@ -189,7 +189,8 @@ def refine_formulation(
     current_formulation: OptimizationFormulation,
     confidence_evaluation: Dict[str, Any],
     client,
-    model: str = "gpt-4o-mini"
+    model: str = "gpt-4o-mini",
+    formulation_history: Optional[list] = None
 ) -> OptimizationFormulation:
     """
     Refine a formulation based on confidence evaluation feedback.
@@ -200,39 +201,37 @@ def refine_formulation(
         confidence_evaluation: The confidence evaluation results
         client: Instructor client for extraction
         model: Model to use for refinement
+        formulation_history: List of all candidate formulations with their evaluations
 
     Returns:
         Refined OptimizationFormulation
     """
-    # Format current formulation
-    current_formulation_str = format_formulation_for_evaluation(current_formulation)
+    # Build candidate formulations section if available
+    candidates_section = ""
+    if formulation_history:
+        candidates_section = "\n\n**CANDIDATE FORMULATIONS:**\n"
+        for entry in formulation_history:
+            iteration = entry['iteration']
+            past_formulation = entry['formulation']
+            past_evaluation = entry['evaluation']
+
+            past_formulation_str = format_formulation_for_evaluation(past_formulation)
+            candidates_section += f"\n--- Iteration {iteration} ---\n"
+            candidates_section += f"Formulation:\n{past_formulation_str}\n\n"
+            candidates_section += f"Confidence Scores:\n"
+            candidates_section += f"- Parameters: {past_evaluation['parameters']['confidence']}/100 - {past_evaluation['parameters']['explanation']}\n"
+            candidates_section += f"- Decision Variables: {past_evaluation['decision_variables']['confidence']}/100 - {past_evaluation['decision_variables']['explanation']}\n"
+            candidates_section += f"- Objective: {past_evaluation['objective']['confidence']}/100 - {past_evaluation['objective']['explanation']}\n"
+            candidates_section += f"- Constraints: {past_evaluation['constraints']['confidence']}/100 - {past_evaluation['constraints']['explanation']}\n"
 
     # Create refinement prompt
-    refinement_prompt = f"""You previously created an optimization formulation, but it needs refinement based on the following confidence evaluation:
+    refinement_prompt = f"""You are refining an optimization formulation. Review all candidate formulations and the feedback to create a better formulation.
 
 **Original Problem:**
 {raw_question}
+{candidates_section}
 
-**Current Formulation:**
-{current_formulation_str}
-
-**Confidence Evaluation:**
-- Parameters: {confidence_evaluation['parameters']['confidence']}/100
-  Issue: {confidence_evaluation['parameters']['explanation']}
-
-- Decision Variables: {confidence_evaluation['decision_variables']['confidence']}/100
-  Issue: {confidence_evaluation['decision_variables']['explanation']}
-
-- Objective: {confidence_evaluation['objective']['confidence']}/100
-  Issue: {confidence_evaluation['objective']['explanation']}
-
-- Constraints: {confidence_evaluation['constraints']['confidence']}/100
-  Issue: {confidence_evaluation['constraints']['explanation']}
-
-**Overall Assessment:**
-{confidence_evaluation['overall_assessment']}
-
-Please create a REFINED formulation that addresses all the identified issues. Pay special attention to the components with lower confidence scores. Ensure that:
+Please create a REFINED formulation that addresses all the identified issues. Learn from what worked well in previous iterations and avoid repeating mistakes. Pay special attention to the components with lower confidence scores. Ensure that:
 1. All parameters are correctly identified and valued
 2. All decision variables are properly defined with correct domains
 3. The objective function correctly represents what needs to be optimized
@@ -310,11 +309,6 @@ def extract_formulation_with_refinement(
             print(f"ITERATION {iteration}/{max_iterations}")
             print('=' * 80)
             print()
-            print("Current Formulation:")
-            print("-" * 80)
-            print(format_formulation_for_evaluation(formulation))
-            print("-" * 80)
-            print()
             print("Evaluating confidence...")
 
         # Evaluate confidence
@@ -379,7 +373,8 @@ def extract_formulation_with_refinement(
                 current_formulation=formulation,
                 confidence_evaluation=evaluation,
                 client=formulation_client,
-                model=formulation_model
+                model=formulation_model,
+                formulation_history=formulation_history
             )
             if verbose:
                 print("✓ Refinement complete")
@@ -390,15 +385,27 @@ def extract_formulation_with_refinement(
             # Don't return immediately, break to select best from history
             break
 
-    # Select the best formulation from history based on highest min confidence (max-min criterion)
+    # Select the best formulation from history based on:
+    # 1. Highest min confidence (weakest component)
+    # 2. Highest overall confidence (when min confidence is tied)
+    # 3. Latest iteration (when both are tied)
     if not formulation_history:
         raise ValueError("No formulations were evaluated")
 
-    best_entry = max(formulation_history, key=lambda x: x['min_confidence'])
+    best_idx = max(
+        range(len(formulation_history)),
+        key=lambda i: (
+            formulation_history[i]['min_confidence'],
+            formulation_history[i]['overall_confidence'],
+            i
+        )
+    )
+    best_entry = formulation_history[best_idx]
 
     if verbose:
         print(f"\n{'=' * 80}")
-        print("SELECTING BEST FORMULATION FROM HISTORY (MAX-MIN CRITERION)")
+        print("SELECTING BEST FORMULATION FROM HISTORY")
+        print("Criteria: Highest min score, then highest overall score, then latest iteration")
         print('=' * 80)
         print(f"\nEvaluated {len(formulation_history)} formulation(s) across {best_entry['iteration']} iteration(s)")
         print("\nConfidence scores by iteration:")
