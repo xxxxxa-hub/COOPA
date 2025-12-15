@@ -119,5 +119,12 @@ def main():
     for opt, count in sorted(optimizer_counts.items(), key=lambda x: -x[1]):
         print(f"    {opt}: {count} time(s)")
 
+    # Find questions with only or_agent
+    or_agent_only = [q for q, opts in results.items() if opts == ["or_agent"]]
+    or_agent_only_sorted = sorted(or_agent_only, key=lambda x: int(x))
+    if or_agent_only_sorted:
+        print(f"\n  Questions with only or_agent:")
+        print(f"    {','.join(or_agent_only_sorted)}")
+
 if __name__ == "__main__":
     main()
