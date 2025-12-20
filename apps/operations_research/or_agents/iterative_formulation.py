@@ -13,10 +13,12 @@ from __future__ import annotations
 import json
 import os
 from typing import Dict, Any, Optional, Tuple
-from openai import OpenAI
+from litellm import completion
+import instructor
 
 from .formulation import (
     OptimizationFormulation,
+    FormulationEvaluation,
     create_instructor_client,
     extract_formulation,
 )
@@ -74,28 +76,21 @@ def format_formulation_for_evaluation(formulation: OptimizationFormulation) -> s
 def evaluate_formulation_confidence(
     raw_question: str,
     formulation: OptimizationFormulation,
-    api_key: Optional[str] = None,
+    client=None,
     model: str = "gpt-4o"
-) -> Dict[str, Any]:
+) -> FormulationEvaluation:
     """
     Evaluate confidence scores for each component of the formulation.
 
     Args:
         raw_question: The original optimization problem question
         formulation: The structured formulation to evaluate
-        api_key: OpenAI API key (if None, uses OPENAI_API_KEY env variable)
-        model: OpenAI model to use for evaluation
+        client: Instructor client (if None, creates a new one)
+        model: Model to use for evaluation (supports all LiteLLM models)
 
     Returns:
-        Dictionary with confidence scores and explanations for each component
+        FormulationEvaluation object with confidence scores and explanations
     """
-    if api_key is None:
-        api_key = os.environ.get("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("API key must be provided or set in OPENAI_API_KEY environment variable")
-
-    client = OpenAI(api_key=api_key)
-
     # Format formulation for evaluation
     formulation_str = format_formulation_for_evaluation(formulation)
 
@@ -108,78 +103,44 @@ Given:
 2. **Proposed Formulation**:
 {formulation_str}
 
-Please evaluate the confidence (0-100) for each of the following components. For each bullet point in each section, assess if it is correct, complete, and appropriate:
+Please evaluate the confidence (0-100) for each of the following components:
 
-1. **PARAMETERS**: Evaluate each parameter definition
-   - Are all necessary parameters identified?
-   - Are the values and units correct?
-   - Are parameter names clear and consistent?
+1. **PARAMETERS**: Are all necessary parameters identified with correct values and units?
+2. **DECISION VARIABLES**: Are all decision variables properly defined with correct domains?
+3. **OBJECTIVE**: Is the objective function correct and does it properly represent what should be optimized?
+4. **CONSTRAINTS**: Are all necessary constraints included and correctly formulated?
 
-2. **DECISION VARIABLES**: Evaluate each decision variable
-   - Are all necessary decision variables defined?
-   - Are the domains correct?
-   - Do they properly represent what needs to be optimized?
+For each component, provide a confidence score from 0-100 and a brief explanation (1-3 sentences)."""
 
-3. **OBJECTIVE**: Evaluate the objective function
-   - Is the optimization sense (maximize/minimize) correct?
-   - Is the mathematical expression correct?
-   - Does it accurately represent what should be optimized?
-   - Are all variables properly used?
+    # Use LiteLLM for all models via instructor
+    if client is None:
+        client = instructor.from_litellm(completion)
 
-4. **CONSTRAINTS**: Evaluate each constraint
-   - Are all necessary constraints included?
-   - Is each constraint correctly formulated?
-   - Are the inequality/equality signs correct?
-   - Are any important constraints missing?
+    # Set parameters for Qwen model
+    kwargs = {}
+    if model == "openrouter/qwen/qwen3-coder-30b-a3b-instruct":
+        kwargs.update({
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "top_k": 20,
+            "repetition_penalty": 1.05
+        })
+    elif model == "openrouter/qwen/qwen3-30b-a3b-thinking-2507":
+        kwargs.update({
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "min_p": 0
+        })
 
-For each component, provide:
-- A confidence score from 0-100 (0 = completely incorrect, 100 = perfect)
-- A brief explanation (1-3 sentences) justifying the score, mentioning specific issues if any
-
-Return your evaluation in the following JSON format:
-{{
-  "parameters": {{
-    "confidence": <score 0-100>,
-    "explanation": "<explanation>"
-  }},
-  "decision_variables": {{
-    "confidence": <score 0-100>,
-    "explanation": "<explanation>"
-  }},
-  "objective": {{
-    "confidence": <score 0-100>,
-    "explanation": "<explanation>"
-  }},
-  "constraints": {{
-    "confidence": <score 0-100>,
-    "explanation": "<explanation>"
-  }},
-  "overall_confidence": <average score>,
-  "overall_assessment": "<brief overall assessment>"
-}}
-
-Be critical and thorough in your evaluation. Respond ONLY with the JSON object, no additional text."""
-
-    # Call OpenAI API
-    response = client.chat.completions.create(
+    evaluation = client.chat.completions.create(
         model=model,
+        response_model=FormulationEvaluation,
         messages=[
             {"role": "user", "content": evaluation_prompt}
-        ]
+        ],
+        **kwargs
     )
-
-    # Parse response
-    response_text = response.choices[0].message.content
-
-    # Extract JSON from response (in case there's extra text)
-    json_start = response_text.find('{')
-    json_end = response_text.rfind('}') + 1
-
-    if json_start == -1 or json_end == 0:
-        raise ValueError("Could not find JSON in response")
-
-    json_str = response_text[json_start:json_end]
-    evaluation = json.loads(json_str)
 
     return evaluation
 
@@ -187,7 +148,7 @@ Be critical and thorough in your evaluation. Respond ONLY with the JSON object, 
 def refine_formulation(
     raw_question: str,
     current_formulation: OptimizationFormulation,
-    confidence_evaluation: Dict[str, Any],
+    confidence_evaluation: FormulationEvaluation,
     client,
     model: str = "gpt-4o-mini",
     formulation_history: Optional[list] = None
@@ -222,10 +183,10 @@ def refine_formulation(
             history_section += f"\n--- Iteration {iteration} ---\n"
             history_section += f"Formulation:\n{past_formulation_str}\n\n"
             history_section += f"Confidence Scores:\n"
-            history_section += f"- Parameters: {past_evaluation['parameters']['confidence']}/100 - {past_evaluation['parameters']['explanation']}\n"
-            history_section += f"- Decision Variables: {past_evaluation['decision_variables']['confidence']}/100 - {past_evaluation['decision_variables']['explanation']}\n"
-            history_section += f"- Objective: {past_evaluation['objective']['confidence']}/100 - {past_evaluation['objective']['explanation']}\n"
-            history_section += f"- Constraints: {past_evaluation['constraints']['confidence']}/100 - {past_evaluation['constraints']['explanation']}\n"
+            history_section += f"- Parameters: {past_evaluation.parameters.confidence}/100 - {past_evaluation.parameters.explanation}\n"
+            history_section += f"- Decision Variables: {past_evaluation.decision_variables.confidence}/100 - {past_evaluation.decision_variables.explanation}\n"
+            history_section += f"- Objective: {past_evaluation.objective.confidence}/100 - {past_evaluation.objective.explanation}\n"
+            history_section += f"- Constraints: {past_evaluation.constraints.confidence}/100 - {past_evaluation.constraints.explanation}\n"
 
     # Create refinement prompt
     refinement_prompt = f"""You are refining an optimization formulation. Review all previous attempts and the feedback to create a better formulation.
@@ -238,20 +199,20 @@ def refine_formulation(
 {current_formulation_str}
 
 **Current Confidence Evaluation:**
-- Parameters: {confidence_evaluation['parameters']['confidence']}/100
-  Issue: {confidence_evaluation['parameters']['explanation']}
+- Parameters: {confidence_evaluation.parameters.confidence}/100
+  Issue: {confidence_evaluation.parameters.explanation}
 
-- Decision Variables: {confidence_evaluation['decision_variables']['confidence']}/100
-  Issue: {confidence_evaluation['decision_variables']['explanation']}
+- Decision Variables: {confidence_evaluation.decision_variables.confidence}/100
+  Issue: {confidence_evaluation.decision_variables.explanation}
 
-- Objective: {confidence_evaluation['objective']['confidence']}/100
-  Issue: {confidence_evaluation['objective']['explanation']}
+- Objective: {confidence_evaluation.objective.confidence}/100
+  Issue: {confidence_evaluation.objective.explanation}
 
-- Constraints: {confidence_evaluation['constraints']['confidence']}/100
-  Issue: {confidence_evaluation['constraints']['explanation']}
+- Constraints: {confidence_evaluation.constraints.confidence}/100
+  Issue: {confidence_evaluation.constraints.explanation}
 
 **Overall Assessment:**
-{confidence_evaluation['overall_assessment']}
+{confidence_evaluation.overall_assessment}
 
 Please create a REFINED formulation that addresses all the identified issues. Learn from what worked well in previous iterations and avoid repeating mistakes. Pay special attention to the components with lower confidence scores. Ensure that:
 1. All parameters are correctly identified and valued
@@ -270,10 +231,28 @@ Provide the complete refined formulation."""
         {"role": "user", "content": refinement_prompt},
     ]
 
+    # Set parameters for Qwen model
+    kwargs = {}
+    if model == "openrouter/qwen/qwen3-coder-30b-a3b-instruct":
+        kwargs.update({
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "top_k": 20,
+            "repetition_penalty": 1.05
+        })
+    elif model == "openrouter/qwen/qwen3-30b-a3b-thinking-2507":
+        kwargs.update({
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "min_p": 0
+        })
+
     refined_formulation = client.chat.completions.create(
         model=model,
         response_model=OptimizationFormulation,
-        messages=messages
+        messages=messages,
+        **kwargs
     )
 
     return refined_formulation
@@ -286,7 +265,7 @@ def extract_formulation_with_refinement(
     evaluation_model: str = "gpt-4o",
     api_key: Optional[str] = None,
     verbose: bool = True
-) -> Tuple[OptimizationFormulation, Dict[str, Any], int]:
+) -> Tuple[OptimizationFormulation, FormulationEvaluation, int]:
     """
     Extract and iteratively refine a formulation.
 
@@ -305,11 +284,15 @@ def extract_formulation_with_refinement(
 
     Returns:
         Tuple of (best_formulation, best_evaluation, best_iteration_number)
-        where best_formulation is the one with the highest minimum confidence
+        where best_evaluation is a FormulationEvaluation object with confidence
+        scores and the formulation is the one with the highest minimum confidence
         score across all components
     """
-    # Create instructor client for formulation
-    formulation_client = create_instructor_client(timeout=120.0)
+    # Create instructor client for formulation with the specified model
+    formulation_client = create_instructor_client(
+        model_name=formulation_model,
+        timeout=120.0
+    )
 
     # Extract initial formulation
     if verbose:
@@ -342,17 +325,17 @@ def extract_formulation_with_refinement(
         evaluation = evaluate_formulation_confidence(
             raw_question=problem_text,
             formulation=formulation,
-            api_key=api_key,
+            client=formulation_client,
             model=evaluation_model
         )
 
-        overall_confidence = evaluation.get("overall_confidence", 0)
+        overall_confidence = evaluation.overall_confidence
 
         # Get individual component confidences
-        params_confidence = evaluation['parameters']['confidence']
-        vars_confidence = evaluation['decision_variables']['confidence']
-        obj_confidence = evaluation['objective']['confidence']
-        constraints_confidence = evaluation['constraints']['confidence']
+        params_confidence = evaluation.parameters.confidence
+        vars_confidence = evaluation.decision_variables.confidence
+        obj_confidence = evaluation.objective.confidence
+        constraints_confidence = evaluation.constraints.confidence
 
         # Calculate min confidence (weakest component)
         min_confidence = min(
@@ -377,13 +360,13 @@ def extract_formulation_with_refinement(
             print(f"  Overall: {overall_confidence}/100")
             print(f"  Min (weakest component): {min_confidence}/100")
             print(f"  - Parameters: {params_confidence}/100")
-            print(f"    {evaluation['parameters']['explanation']}")
+            print(f"    {evaluation.parameters.explanation}")
             print(f"  - Decision Variables: {vars_confidence}/100")
-            print(f"    {evaluation['decision_variables']['explanation']}")
+            print(f"    {evaluation.decision_variables.explanation}")
             print(f"  - Objective: {obj_confidence}/100")
-            print(f"    {evaluation['objective']['explanation']}")
+            print(f"    {evaluation.objective.explanation}")
             print(f"  - Constraints: {constraints_confidence}/100")
-            print(f"    {evaluation['constraints']['explanation']}")
+            print(f"    {evaluation.constraints.explanation}")
             print()
 
         # If this is the last iteration, we'll select the best from history

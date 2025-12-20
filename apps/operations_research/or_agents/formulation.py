@@ -5,17 +5,17 @@ from __future__ import annotations
 import argparse
 import os
 from typing import Any, List, Literal, Optional, Tuple
-
+import json
 import re
 
 import instructor
-from openai import OpenAI
 from openai.types.chat import ChatCompletionMessageParam
+from litellm import completion
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, Field, ValidationError, model_validator, field_validator
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 
@@ -134,6 +134,24 @@ class OptimizationFormulation(BaseModel):
     variables: List[VariableDefinition]
     objective: ObjectiveDefinition
     constraints: List[ConstraintDefinition]
+
+
+class ComponentConfidence(BaseModel):
+    """Confidence evaluation for a single formulation component."""
+
+    confidence: int = Field(..., ge=0, le=100, description="Confidence score from 0-100")
+    explanation: str = Field(..., description="Brief explanation of the score")
+
+
+class FormulationEvaluation(BaseModel):
+    """Complete evaluation of an optimization formulation."""
+
+    parameters: ComponentConfidence = Field(..., description="Evaluation of parameters")
+    decision_variables: ComponentConfidence = Field(..., description="Evaluation of decision variables")
+    objective: ComponentConfidence = Field(..., description="Evaluation of objective function")
+    constraints: ComponentConfidence = Field(..., description="Evaluation of constraints")
+    overall_confidence: int = Field(..., ge=0, le=100, description="Average confidence score")
+    overall_assessment: str = Field(..., description="Brief overall assessment")
 
     # @model_validator(mode="after")
     # @classmethod
@@ -344,10 +362,16 @@ def select_examples(max_examples: Optional[int]) -> List[dict]:
     return EXAMPLE_PROBLEMS[:max_examples]
 
 
-def create_instructor_client(timeout: float = 90.0) -> instructor.Instructor:
-    """Instantiate an Instructor-wrapped OpenAI client."""
+def create_instructor_client(model_name: str, timeout: float = 180.0) -> instructor.Instructor:
+    """Instantiate an Instructor-wrapped client using LiteLLM.
 
-    return instructor.from_openai(OpenAI(timeout=timeout))
+    Supports all models through LiteLLM:
+    - OpenAI models (gpt-4, o3, o4-mini, etc.)
+    - Gemini models (gemini/gemini-2.5-flash, etc.)
+    - Qwen models (qwen/qwen-max, etc.)
+    - And any other LiteLLM-supported provider
+    """
+    return instructor.from_litellm(completion, mode=instructor.Mode.MD_JSON)
 
 
 @retry(
@@ -362,12 +386,29 @@ def extract_formulation(
     model: str = "gpt-4o-mini",
 ) -> OptimizationFormulation:
     """Send the problem text to the LLM and return the structured formulation."""
-    
+
     messages: List[ChatCompletionMessageParam] = [
         {"role": "system", "content": SYSTEM_PROMPT.strip()},
         {"role": "user", "content": problem_text},
     ]
-    return client.chat.completions.create(model=model, response_model=OptimizationFormulation, messages=messages)
+
+    # Set parameters for Qwen model
+    kwargs = {}
+    if model == "openrouter/qwen/qwen3-coder-30b-a3b-instruct":
+        kwargs.update({
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "top_k": 20,
+            "repetition_penalty": 1.05
+        })
+    elif model == "openrouter/qwen/qwen3-30b-a3b-thinking-2507":
+        kwargs.update({
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "min_p": 0
+        })
+    return client.chat.completions.create(model=model, response_model=OptimizationFormulation, messages=messages, **kwargs)
 
 
 def extract_examples(
@@ -450,11 +491,10 @@ def main() -> None:
             print(f"[{idx}/{len(selected)}] {example['label']}: {preview_question(example['question'])}")
         return
 
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Set OPENAI_API_KEY before running the extraction demo.")
-        return
+    # Note: LiteLLM will handle API key lookup via environment variables
+    # Set the appropriate API key for your model (e.g., OPENAI_API_KEY for GPT models, GEMINI_API_KEY for Gemini, etc.)
 
-    client = create_instructor_client(timeout=args.timeout)
+    client = create_instructor_client(model_name=args.model, timeout=args.timeout)
     for label, formulation in extract_examples(
         client,
         model=args.model,
