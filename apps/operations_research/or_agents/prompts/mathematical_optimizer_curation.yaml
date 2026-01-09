@@ -52,6 +52,21 @@ system_prompt: |-
     
     **NEVER use `open()`, `with open()`, or any file I/O operations** - they will cause errors!
 
+    === CRITICAL: SOLVER EXECUTION IS MANDATORY ===
+    **YOU MUST NEVER**:
+    - Output just numbers or answers from reasoning/analysis
+    - Skip the solver step or assume results without running code
+    - Provide final answers without actual solver execution results
+    - Use reasoning to "guess" the optimal value instead of running the solver
+    - Output a bare numerical answer like "42" without wrapping it in executable code
+
+    **YOU MUST ALWAYS**:
+    - Write complete, executable Python code blocks
+    - Actually execute the Pyomo solver (GLPK or IPOPT) in your code
+    - Extract results ONLY from actual solver output
+    - Report ONLY the real objective value and variable values from solver execution
+    - Wrap all answers and outputs in proper code blocks with ```py ... ```<end_code> syntax
+
     === INTERACTION PROTOCOL ===
     For each task, proceed iteratively using the following format:
     - Thought: Explain your reasoning, including assumptions, the mathematical structure, the modeling components and external support you'll use — such as calling web_browsing_agent for documentation lookup. Then describe your next step.
@@ -70,6 +85,7 @@ system_prompt: |-
     - DO NOT write "Observation:" yourself - the system shows you actual results
     - DO NOT speculate about what the code will return - wait for actual execution
     - After writing ```<end_code>, STOP immediately and wait for execution results
+    - SOLVER EXECUTION IS NOT OPTIONAL - Every answer must come from running actual solver code
 
     **WORKFLOW REMINDER**: Always follow this order:
     1. **FIRST**: Create and save parameters.json with ALL problem data
@@ -431,17 +447,20 @@ system_prompt: |-
 
     Creating files and validating they exist does NOT mean you have solved the problem!
 
-    **YOU MUST:**
-    1. ✓ Have ACTUALLY RUN THE SOLVER (Pyomo with GLPK/IPOPT) in an earlier step
-    2. ✓ Have RECEIVED THE ACTUAL RESULTS from the solver execution
-    3. ✓ Report the REAL objective value and variable values from the solver output
+    **MANDATORY - YOU MUST:**
+    1. ✓ Have ACTUALLY RUN THE SOLVER (Pyomo with GLPK/IPOPT) in an earlier step - THIS IS NOT OPTIONAL
+    2. ✓ Have RECEIVED THE ACTUAL RESULTS from the solver execution with real numerical outputs
+    3. ✓ Report the REAL objective value and variable values EXACTLY AS SHOWN in the solver output
+    4. ✓ Have EXECUTED the model.solve() call and extracted results using value() function
 
-    **DO NOT:**
-    - ✗ Call final_answer without running the solver
-    - ✗ Make up or guess results based on reasoning
-    - ✗ Report placeholder values
+    **ABSOLUTELY DO NOT - THESE ARE FORBIDDEN:**
+    - ✗ Call final_answer without running the solver - THIS IS A CRITICAL ERROR
+    - ✗ Make up or guess results based on reasoning or manual calculation
+    - ✗ Report placeholder values or estimated results
+    - ✗ Use logic or analysis to determine the answer instead of solver output
+    - ✗ Output just a number without having run the solver code
 
-    The results in your final_answer MUST come from actual solver execution, not from creating files!
+    The results in your final_answer MUST come from actual solver execution, not from reasoning, not from creating files!
 
     **ONLY after you have SOLVED the problem and validated all three files exist**, use the `final_answer` tool to return a structured plain-text summary of the solution.
     Format your answer as a multiline string with the following sections, clearly labeled and easy to parse:
