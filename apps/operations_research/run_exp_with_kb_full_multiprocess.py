@@ -13,7 +13,12 @@ import sys
 from io import StringIO
 from contextlib import redirect_stdout, redirect_stderr
 import re
-
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="Pydantic serializer warnings.*",
+    category=UserWarning,
+)
 # Disable colored output
 # os.environ['NO_COLOR'] = '1'
 # os.environ['TERM'] = 'dumb'
@@ -277,6 +282,23 @@ def process_single_problem(args_tuple):
                         # Format the formulation into a structured prompt
                         prompt = format_formulation_prompt(formulation)
 
+                        # Save formulation schema and evaluation results to working directory
+                        try:
+                            formulation_file = problem_working_directory / "formulation.json"
+                            with open(formulation_file, 'w', encoding='utf-8') as f:
+                                json.dump(formulation.model_dump(), f, indent=2)
+                            print(f"Formulation saved to {formulation_file}")
+
+                            # Save schema if evaluation data is available
+                            if formulation_confidence_data is not None:
+                                evaluation_file = problem_working_directory / "formulation_evaluation.json"
+                                with open(evaluation_file, 'w', encoding='utf-8') as f:
+                                    json.dump(formulation_confidence_data, f, indent=2)
+                                print(f"Evaluation results saved to {evaluation_file}")
+
+                        except Exception as schema_error:
+                            print(f"Warning: Failed to save formulation files: {schema_error}")
+
                     except Exception as e:
                         print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
                         print(f"Falling back to raw problem text.")
@@ -366,6 +388,23 @@ def process_single_problem(args_tuple):
 
                 # Format the formulation into a structured prompt
                 prompt = format_formulation_prompt(formulation)
+
+                # Save formulation schema and evaluation results to working directory
+                try:
+                    formulation_file = problem_working_directory / "formulation.json"
+                    with open(formulation_file, 'w', encoding='utf-8') as f:
+                        json.dump(formulation.model_dump(), f, indent=2)
+                    print(f"Formulation saved to {formulation_file}")
+
+                    # Save schema if evaluation data is available
+                    if formulation_confidence_data is not None:
+                        evaluation_file = problem_working_directory / "formulation_evaluation.json"
+                        with open(evaluation_file, 'w', encoding='utf-8') as f:
+                            json.dump(formulation_confidence_data, f, indent=2)
+                        print(f"Evaluation results saved to {evaluation_file}")
+
+                except Exception as schema_error:
+                    print(f"Warning: Failed to save formulation files: {schema_error}")
             except Exception as e:
                 print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
                 print(f"Falling back to raw problem text.")
@@ -533,7 +572,7 @@ def run_experiment(
         dataset_name = "easylp"
 
     # Create logs directory
-    log_dir = Path(output_path).parent / "logs" / "v11"
+    log_dir = Path(output_path).parent / "logs" / "v12"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Load all problems from dataset that are >= start_index
@@ -628,14 +667,14 @@ Mode options:
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v11").resolve()
+        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v12").resolve()
     if args.working_directory is None:
-        args.working_directory = Path(f"working_directory_{args.dataset}_{args.model_id.replace('/', '-')}_v11")
+        args.working_directory = Path(f"working_directory/{args.dataset}_{args.model_id.replace('/', '-')}_v12")
     if args.output is None:
         # Include mode in filename
-        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v11.jsonl").resolve()
+        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v12.jsonl").resolve()
 
-    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v11").resolve()
+    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v12").resolve()
 
     run_experiment(
         dataset_path=f"apps/operations_research/datasets/{args.dataset}/{args.dataset}.jsonl",
