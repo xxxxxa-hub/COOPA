@@ -19,6 +19,8 @@ warnings.filterwarnings(
     message="Pydantic serializer warnings.*",
     category=UserWarning,
 )
+import litellm
+litellm.suppress_debug_info = True
 # Disable colored output
 # os.environ['NO_COLOR'] = '1'
 # os.environ['TERM'] = 'dumb'
