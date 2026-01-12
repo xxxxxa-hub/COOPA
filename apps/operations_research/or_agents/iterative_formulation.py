@@ -118,20 +118,22 @@ For each component, provide a confidence score from 0-100 and a brief explanatio
 
     # Set parameters for Qwen model
     kwargs = {}
-    if model == "openrouter/qwen/qwen3-coder-30b-a3b-instruct":
-        kwargs.update({
-            "temperature": 0.7,
-            "top_p": 0.8,
-            "top_k": 20,
-            "repetition_penalty": 1.05
-        })
-    elif model == "openrouter/qwen/qwen3-30b-a3b-thinking-2507":
-        kwargs.update({
-            "temperature": 0.6,
-            "top_p": 0.95,
-            "top_k": 20,
-            "min_p": 0
-        })
+    if model == "openrouter/deepseek/deepseek-v3.2":
+        kwargs.update({"extra_body":{"reasoning": {"enabled": True}}})
+    # if model == "openrouter/qwen/qwen3-coder-30b-a3b-instruct":
+    #     kwargs.update({
+    #         "temperature": 0.7,
+    #         "top_p": 0.8,
+    #         "top_k": 20,
+    #         "repetition_penalty": 1.05
+    #     })
+    # elif model == "openrouter/qwen/qwen3-30b-a3b-thinking-2507":
+    #     kwargs.update({
+    #         "temperature": 0.6,
+    #         "top_p": 0.95,
+    #         "top_k": 20,
+    #         "min_p": 0
+    #     })
 
     evaluation = client.chat.completions.create(
         model=model,
@@ -167,9 +169,6 @@ def refine_formulation(
     Returns:
         Refined OptimizationFormulation
     """
-    # Format current formulation
-    current_formulation_str = format_formulation_for_evaluation(current_formulation)
-
     # Build history section if available
     history_section = ""
     if formulation_history:
@@ -195,26 +194,7 @@ def refine_formulation(
 {raw_question}
 {history_section}
 
-**Current Formulation (Latest Iteration):**
-{current_formulation_str}
-
-**Current Confidence Evaluation:**
-- Parameters: {confidence_evaluation.parameters.confidence}/100
-  Issue: {confidence_evaluation.parameters.explanation}
-
-- Decision Variables: {confidence_evaluation.decision_variables.confidence}/100
-  Issue: {confidence_evaluation.decision_variables.explanation}
-
-- Objective: {confidence_evaluation.objective.confidence}/100
-  Issue: {confidence_evaluation.objective.explanation}
-
-- Constraints: {confidence_evaluation.constraints.confidence}/100
-  Issue: {confidence_evaluation.constraints.explanation}
-
-**Overall Assessment:**
-{confidence_evaluation.overall_assessment}
-
-Please create a REFINED formulation that addresses all the identified issues. Learn from what worked well in previous iterations and avoid repeating mistakes. Pay special attention to the components with lower confidence scores. Ensure that:
+Please create a REFINED formulation that addresses all the identified issues from past iterations. Learn from what worked well in previous iterations and avoid repeating mistakes. Pay special attention to the components with lower confidence scores. Ensure that:
 1. All parameters are correctly identified and valued
 2. All decision variables are properly defined with correct domains
 3. The objective function correctly represents what needs to be optimized
@@ -233,20 +213,22 @@ Provide the complete refined formulation."""
 
     # Set parameters for Qwen model
     kwargs = {}
-    if model == "openrouter/qwen/qwen3-coder-30b-a3b-instruct":
-        kwargs.update({
-            "temperature": 0.7,
-            "top_p": 0.8,
-            "top_k": 20,
-            "repetition_penalty": 1.05
-        })
-    elif model == "openrouter/qwen/qwen3-30b-a3b-thinking-2507":
-        kwargs.update({
-            "temperature": 0.6,
-            "top_p": 0.95,
-            "top_k": 20,
-            "min_p": 0
-        })
+    if model == "openrouter/deepseek/deepseek-v3.2":
+        kwargs.update({"extra_body":{"reasoning": {"enabled": True}}})
+    # if model == "openrouter/qwen/qwen3-coder-30b-a3b-instruct":
+    #     kwargs.update({
+    #         "temperature": 0.7,
+    #         "top_p": 0.8,
+    #         "top_k": 20,
+    #         "repetition_penalty": 1.05
+    #     })
+    # elif model == "openrouter/qwen/qwen3-30b-a3b-thinking-2507":
+    #     kwargs.update({
+    #         "temperature": 0.6,
+    #         "top_p": 0.95,
+    #         "top_k": 20,
+    #         "min_p": 0
+    #     })
 
     refined_formulation = client.chat.completions.create(
         model=model,
