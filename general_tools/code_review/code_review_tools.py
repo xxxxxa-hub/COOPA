@@ -21,9 +21,15 @@ class CodeReviewResult(BaseModel):
 class CodeReview(Tool):
     name = "code_review"
     description = (
-        "Conduct thorough reviews of the implemented code related to optimization problems. "
+        "Review optimization code using the execution result or error log. "
+        "Pass the execution output (stdout/stderr/traceback) as the execution_log argument."
     )
-    inputs = {}
+    inputs = {
+        "execution_log": {
+            "type": "string",
+            "description": "The execution result or error log from running the solver code via load_object_from_python_file().",
+        }
+    }
     output_type = "string"
 
     def __init__(self, working_dir, model_id):
@@ -37,10 +43,10 @@ class CodeReview(Tool):
         else:
             self.client = instructor.from_litellm(completion, mode=instructor.Mode.MD_JSON)
 
-    def forward(self) -> str:
+    def forward(self, execution_log: str) -> str:
         """
         Read code from solve.py, parameters from parameters.json, and problem from problem.txt,
-        then send them to OpenAI's API for code review.
+        along with the execution log from running the solver, then send them to the LLM for review.
         Returns a string with Pass status and explanation.
         """
         # Read the files
@@ -75,6 +81,9 @@ class CodeReview(Tool):
         else:
             content_parts.append("## Problem Description: File not found (problem.txt)")
 
+        # Add execution log
+        content_parts.append(f"## Execution Log:\n\n```\n{execution_log}\n```")
+
         # Combine all content
         full_content = "\n\n".join(content_parts)
 
@@ -82,45 +91,60 @@ class CodeReview(Tool):
         system_prompt = (
         "You are a lead Operations Research Scientist and technical reviewer. "
         "Your goal is to AUDIT optimization models (Pyomo/Gurobi/PuLP) for correctness, robustness, and logic. "
+        "You will be given the source code, parameters, problem description, AND the execution log "
+        "(which may contain solver output, tracebacks, or error messages). "
         "Do not focus on trivial style issues (like variable naming preferences) unless they cause ambiguity. "
-        "Focus on MATHEMATICAL VALIDITY and BUSINESS LOGIC. "
+        "Focus on MATHEMATICAL VALIDITY, BUSINESS LOGIC, and EXECUTION CORRECTNESS. "
         "\n\n"
         "CONDUCT YOUR REVIEW USING THIS HIERARCHICAL CHECKLIST:\n"
         "\n"
+        "### TIER 0: EXECUTION RESULT ANALYSIS (The 'Did it run correctly?' Check)\n"
+        "0. **Execution Errors**: \n"
+        "   - If the execution log contains a traceback or error, identify the root cause (e.g., import errors, NameError, TypeError, solver failures). \n"
+        "   - Provide a specific fix for the error. \n"
+        "   - This is the HIGHEST PRIORITY. If the code crashed, focus on fixing the crash first.\n"
+        "1. **Solver Status**: \n"
+        "   - Did the solver return 'optimal'? If 'infeasible' or 'unbounded', diagnose which constraints or bounds are likely causing the issue.\n"
+        "2. **Result Sanity Check**: \n"
+        "   - Are the returned variable values and objective value reasonable given the problem description? \n"
+        "   - Do the results violate any obvious physical or business constraints (e.g., negative quantities, values exceeding capacity)?\n"
+        "\n"
         "### TIER 1: SOLVER COMPATIBILITY & SYNTAX (The 'Will it run?' Check)\n"
-        "1. **Linearity & Convexity**: \n"
+        "3. **Linearity & Convexity**: \n"
         "   - Are non-linear functions (`abs`, `max`, `min`, `floor`, `if/else`) applied directly to decision variables? \n"
         "   - This is a CRITICAL FAIL for LP/MILP solvers. These logic must be modeled using binary variables or linear constraints.\n"
-        "2. **Index Alignment & Bounds**: \n"
+        "4. **Index Alignment & Bounds**: \n"
         "   - Check for Off-By-One errors (e.g., Python 0-index vs. Mathematical 1-index).\n"
         "   - Are loop boundaries correct? (e.g., `range(T)` vs `range(1, T+1)`).\n"
-        "3. **Variable Domains**: \n"
+        "5. **Variable Domains**: \n"
         "   - Are discrete decisions (e.g., number of trucks, yes/no decisions) modeled as `Integers` or `Binary`?\n"
         "   - Are continuous quantities (e.g., money, water, time) modeled as `Reals`?\n"
         "\n"
         "### TIER 2: SYSTEM DYNAMICS & FLOW LOGIC (The 'Does it flow?' Check)\n"
-        "4. **Flow Balance & Conservation Laws**: \n"
+        "6. **Flow Balance & Conservation Laws**: \n"
         "   - For any node/time-step: Does `Input + Previous_Storage == Output + Current_Storage`? \n"
         "   - Resources (money, inventory, time) cannot appear or disappear by magic. \n"
         "   - **FAIL** if specific time periods are modeled as isolated buckets without linking to previous/next periods.\n"
-        "5. **State Transition Continuity**: \n"
+        "7. **State Transition Continuity**: \n"
         "   - Does the state at $t$ (e.g., inventory, location, fund balance) correctly depend on the state at $t-1$?\n"
         "   - Check distinct 'Before Action' vs 'After Action' states if simultaneous events occur.\n"
-        "6. **Boundary Conditions**: \n"
+        "8. **Boundary Conditions**: \n"
         "   - Are initial conditions ($t=0$) properly constrained?\n"
         "   - Are end-of-horizon conditions ($t=T$) handled (e.g., minimum ending inventory)?\n"
         "\n"
         "### TIER 3: SEMANTIC & PHYSICAL REALITY (The 'Does it make sense?' Check)\n"
-        "7. **Objective Function Alignment**: \n"
+        "9. **Objective Function Alignment**: \n"
         "   - Does the minimization/maximization target represent the GLOBAL goal? \n"
         "   - Beware of minimizing a local variable (e.g., 'Cost in Jan') instead of the global variable (e.g., 'Total Initial Investment' or 'Sum of Costs').\n"
-        "8. **Feasibility Buffers**: \n"
+        "10. **Feasibility Buffers**: \n"
         "   - Can the constraints theoretically be met? \n"
         "\n"
         "RESPONSE GUIDELINES:\n"
-        "- **Logic First**: If you find a logic flaw (Tier 2 or 3), prioritize it over syntax errors.\n"
+        "- **Execution Errors First**: If the execution log shows a crash or traceback, diagnose and fix that before anything else.\n"
+        "- **Logic Second**: If execution succeeded but results look wrong, check for logic flaws (Tier 2 or 3).\n"
         "- **Structural Fixes**: Do not just say 'Change variable X'. Say 'Refactor the constraint to track cumulative flow: S[t] = S[t-1] + ...'.\n"
-        "- **Pass criteria**: Return `Pass=True` ONLY if the model accurately represents the physical/economic reality described in the problem text AND is mathematically solvable."
+        "- **Pass criteria**: Return `Pass=True` ONLY if the execution succeeded with an optimal solution, the results are reasonable, "
+        "the model accurately represents the physical/economic reality described in the problem text, AND is mathematically correct."
         )
 
         result = self.client.chat.completions.create(
@@ -143,12 +167,13 @@ def main():
     # Create CodeReview instance
     code_reviewer = CodeReview(working_dir=working_dir, model_id="openrouter/google/gemini-2.5-flash")
 
-    # Call forward() with no arguments
+    # Call forward() with a sample execution log
+    sample_log = "Status: optimal\nObjective: 100.0\nVariables:\n  x = 10.0\n  y = 5.0"
     print("Running code review...")
     print("-" * 80)
 
     try:
-        result = code_reviewer.forward()
+        result = code_reviewer.forward(execution_log=sample_log)
         print(result)
     except Exception as e:
         print(f"Error during code review: {e}")

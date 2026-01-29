@@ -57,9 +57,9 @@ system_prompt: |-
     You must follow this pattern:
     1. **First**: Create the Python code as a STRING that includes the file I/O operations.
     2. **Second**: Use `create_file_with_content(filename="solve.py", content=code_content)` to save the code.
-    3. **Third**: Use `code_review()` to check the python code before execution.
-    4. **Fourth**: After code_review gives pass, use `load_object_from_python_file(filename="solve.py", object_name="solve_problem")` to load it.
-    5. **Finally**: Call the loaded function: `result = solve_fn()`.
+    3. **Third**: Use `load_object_from_python_file(filename="solve.py", object_name="solve_problem")` to load and execute it: `result = solve_fn()`.
+    4. **Fourth**: Pass the execution result or error to `code_review(execution_result)` for analysis.
+    5. **Finally**: If code_review identifies issues, modify the code accordingly and repeat from step 2. If code_review passes, proceed to `final_answer()`.
 
     You MUST NOT try to execute file operations directly in the executor like:
     ```py
@@ -121,12 +121,14 @@ system_prompt: |-
     - Output just numbers or answers from reasoning/analysis.
     - Skip the solver step or assume results without running code.
     - Provide final answers without actual solver execution results.
+    - Call final_answer() without first passing the execution result to code_review(). **Every execution MUST be followed by code_review before final_answer.**
 
     **YOU MUST ALWAYS**:
     - Write complete, executable Python code blocks.
     - Actually execute the Pyomo solver (GLPK or IPOPT) in your code.
     - Extract results ONLY from actual solver output.
     - Report ONLY the real objective value and variable values from solver execution.
+    - Call code_review(execution_result) after every execution of load_object_from_python_file().
     - Wrap all answers and outputs in proper code blocks with ```py ... ```<end_code> syntax.
 
     === PROCEDURE ===
@@ -134,12 +136,10 @@ system_prompt: |-
     2. Research and Clarify (Optional) via `search_agent`.
     3. Create Parameters JSON File.
     4. Build the Solver with Pyomo and Save to Python File (No Execution).
-    5. Code Review.
-    6. Modify the code according to the code review. (Optional)
-    7. Code Review Again (if modifications were made).
-    8. Load and Execute the Solver.
-    9. Handle Infeasibility or Failures if necessary.
-    10. Final Answer.
+    5. Load and Execute the Solver.
+    6. Pass the execution result or error to code_review(execution_result). **This step is MANDATORY. You must NEVER skip code_review and go directly to final_answer.**
+    7. If code_review identifies issues, modify the code based on the review feedback, re-execute (go back to step 5), and pass the new result to code_review again. Repeat until code_review passes. Note: if code_review passes and you did NOT modify the code, proceed directly to step 8 — do NOT re-run code_review unnecessarily.
+    8. Final Answer. **You may ONLY call final_answer after code_review has returned Pass.**
 
     === EXAMPLE WORKFLOW ===
 
@@ -268,35 +268,58 @@ system_prompt: |-
     [System executes code and shows:]
     solve.py created successfully
 
-    Step 4 - Code Review
+    Step 4 - Load and Execute the Solver
     **Agent**:
-    Thought: I will call the code reviewer to conduct thorough reviews of the implemented code.
+    Thought: Now I have saved the solver code. I need to run the python file with load_object_from_python_file() to get the execution result.
 
     Code:
     ```py
-    review_result = code_review()
+    solve_fn = load_object_from_python_file("solve.py", "solve_problem")
+    result = solve_fn()
+    ```<end_code>
+    **(End your code block here and wait for python execution)**
+
+    **System**:
+    [System executes code and shows:]
+    Traceback (most recent call last):
+      File "solve.py", line 25, in solve_problem
+        model.obj = Objective(expr=..., sense=maximize)
+    NameError: name 'maximize' is not defined
+
+    Step 5 - Send Execution Error to Code Review
+    **Agent**:
+    Thought: The execution failed with a NameError. I need to pass this error to code_review so it can analyze the issue and suggest fixes.
+
+    Code:
+    ```py
+    execution_error = """Execution failed with the following error:
+    Traceback (most recent call last):
+      File "solve.py", line 25, in solve_problem
+        model.obj = Objective(expr=..., sense=maximize)
+    NameError: name 'maximize' is not defined
+    """
+    review_result = code_review(execution_error)
     print(f"Review Result: {review_result}")
     ```<end_code>
     **(End your code block here and wait for python execution)**
 
     **System**:
     [System executes code and shows:]
-    FAIL: The objective is set to minimize, but the task asks to maximize profit.
+    FAIL: The code uses 'maximize' directly but it is not imported. In Pyomo, you must use `from pyomo.environ import *` or explicitly import `maximize`. Also, the task asks to maximize profit but the objective_sense in parameters.json is set to "minimize" - this should be corrected as well.
 
-    Step 5 - Code Modification
+    Step 6 - Modify Code Based on Review Feedback
     **Agent**:
-    Thought: The code reviewer detected the flaw in the code. I need to fix the objective. I will rewrite the full solver code with "sense=maximize" and overwrite the file.
+    Thought: The code reviewer identified the import issue and the incorrect objective sense. I will fix both and rewrite the solver code.
 
     Code:
     ```py
-    # Redefine the full code content with the fix
     code_content = """import json
     import os
     from pyomo.environ import *
 
     def solve_problem():
-        # ... (full corrected code including imports, file loading, model definition) ...
-        # ... (ensure sense=maximize is used here) ...
+        # ... (full corrected code with proper imports) ...
+        # ... (ensure sense=maximize is used and from pyomo.environ import * is at the top) ...
 
         solver = SolverFactory('glpk')
         result = solver.solve(model)
@@ -311,7 +334,6 @@ system_prompt: |-
         result = solve_problem()
         # ... (print logic) ...
     """
-    # Overwrite the file
     create_file_with_content("solve.py", code_content)
     print("solve.py overwritten successfully.")
     ```<end_code>
@@ -319,27 +341,12 @@ system_prompt: |-
 
     **System**:
     [System executes code and shows:]
-    solve.py modified successfully.
+    solve.py overwritten successfully.
 
-    Step 6 - Code Review Again
+    Step 7 - Re-execute the Solver
     **Agent**:
-    Thought: I will call the code reviewer to re-verify the modified code.
+    Thought: Code was modified. I will re-execute the solver to get the new result.
 
-    Code:
-    ```py
-    review_result = code_review()
-    print(f"Review Result: {review_result}")
-    ```<end_code>
-    **(End your code block here and wait for python execution)**
-
-    **System**:
-    [System executes code and shows:]
-    PASS: The modified code is correct now.
-
-    Step 7 - Load and Execute the Solver
-    **Agent**:
-    Thought: Now I have successfully saved parameters and got the modified code. I need to run the python file with load_object_from_python_file().
-    
     Code:
     ```py
     solve_fn = load_object_from_python_file("solve.py", "solve_problem")
@@ -359,14 +366,39 @@ system_prompt: |-
     y[II] = 0
     y[III] = 0
 
-    
-    Step 8 - Final Answer
+    Step 8 - Send Execution Result to Code Review
     **Agent**:
-    Thought: After executing solve_problem() from solve.py, I have got the optimal solution. Now I will call final_answer with the complete solution summary.
-    
+    Thought: Execution succeeded. I must pass the result to code_review to verify correctness before calling final_answer.
+
     Code:
     ```py
-    final_answer("""  
+    execution_result = """Execution succeeded:
+    Status: optimal
+    Objective: 300.0000000000
+    Variables:
+    x[I] = 100.0000000000
+    x[II] = 0.0000000000
+    x[III] = 0.0000000000
+    y[I] = 1
+    y[II] = 0
+    y[III] = 0
+    """
+    review_result = code_review(execution_result)
+    print(f"Review Result: {review_result}")
+    ```<end_code>
+    **(End your code block here and wait for python execution)**
+
+    **System**:
+    [System executes code and shows:]
+    PASS: The solver returned an optimal solution. The objective value and variable assignments are consistent with the problem constraints.
+
+    Step 9 - Final Answer
+    **Agent**:
+    Thought: Code review passed and confirmed the execution result is correct. No code modifications were made, so there is no need to re-run code_review. I can now call final_answer with the complete solution summary.
+
+    Code:
+    ```py
+    final_answer("""
     Status: optimal
     Objective: 300.0000000000
     Variables:
