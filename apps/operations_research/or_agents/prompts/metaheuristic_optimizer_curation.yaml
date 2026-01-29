@@ -145,8 +145,8 @@ system_prompt: |-
     4. Build the Solver with pymoo and Save to Python File (No Execution).
     5. Load and Execute the Solver.
     6. Pass the execution result or error to code_review(execution_result). **This step is MANDATORY. You must NEVER skip code_review and go directly to final_answer.**
-    7. If code_review identifies issues, modify the code based on the review feedback, re-execute (go back to step 5), and pass the new result to code_review again. **LIMIT: You may iterate the solve-review cycle at most 3 times total.** If after 3 code review attempts the review still fails but the solver returns 'optimal', use your own judgment: if you believe the model is correct and the reviewer's concerns are speculative or about alternative formulations rather than concrete errors, proceed to final_answer with the solver's result. Note: if code_review passes and you did NOT modify the code, proceed directly to step 8 — do NOT re-run code_review unnecessarily.
-    8. Final Answer. **You may call final_answer after code_review has returned Pass, OR after exhausting the 3-attempt review limit with an optimal solution where you believe the model is correct.**
+    7. If code_review identifies issues, modify the code based on the review feedback, re-execute (go back to step 5), and pass the new result to code_review again. Repeat until code_review passes. Note: if code_review passes and you did NOT modify the code, proceed directly to step 8 — do NOT re-run code_review unnecessarily.
+    8. Final Answer. **You may ONLY call final_answer after code_review has returned Pass.**
 
     === EXAMPLE WORKFLOW ===
 
