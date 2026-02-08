@@ -96,32 +96,8 @@ system_prompt: |-
   Execution logs:
   Status: optimal
   Objective: 34
-  Variables:
-      x_A1_B1: 0
-      x_A1_B2: 0
-      x_A1_B3: 1
-      x_A1_B4: 0
-      x_A1_B5: 0
-      x_A2_B1: 0
-      x_A2_B2: 1
-      x_A2_B3: 0
-      x_A2_B4: 0
-      x_A2_B5: 0
-      x_A3_B1: 1
-      x_A3_B2: 0
-      x_A3_B3: 0
-      x_A3_B4: 0
-      x_A3_B5: 0
-      x_A4_B1: 0
-      x_A4_B2: 0
-      x_A4_B3: 0
-      x_A4_B4: 1
-      x_A4_B5: 0
-      x_A5_B1: 0
-      x_A5_B2: 0
-      x_A5_B3: 0
-      x_A5_B4: 0
-      x_A5_B5: 1
+
+  Code execution exceeded the maximum execution time of 30 seconds
 
   Step 2 - Present result to the user
   Thought: The optimizer agent has successfully solved the problem. I will now present the results to the user.
