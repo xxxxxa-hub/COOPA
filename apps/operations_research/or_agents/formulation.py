@@ -396,22 +396,10 @@ def extract_formulation(
 
     # Set parameters for Qwen model
     kwargs = {}
-    if model == "openrouter/deepseek/deepseek-v3.2":
-        kwargs.update({"extra_body":{"reasoning": {"enabled": True}}})
-    # if model == "openrouter/qwen/qwen3-coder-30b-a3b-instruct":
-    #     kwargs.update({
-    #         "temperature": 0.7,
-    #         "top_p": 0.8,
-    #         "top_k": 20,
-    #         "repetition_penalty": 1.05
-    #     })
-    # elif model == "openrouter/qwen/qwen3-30b-a3b-thinking-2507":
-    #     kwargs.update({
-    #         "temperature": 0.6,
-    #         "top_p": 0.95,
-    #         "top_k": 20,
-    #         "min_p": 0
-    #     })
+    if any(x in model for x in ["gemini", "thinking"]):
+        kwargs.update({"extra_body":{"reasoning": {"effort": "high"}}})
+    elif any(x in model for x in ["o3", "o4", "gpt-5"]):
+        kwargs.update({"reasoning_effort": "high"})
     return client.chat.completions.create(model=model, response_model=OptimizationFormulation, messages=messages, **kwargs)
 
 
