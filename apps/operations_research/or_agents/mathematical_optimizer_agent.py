@@ -8,6 +8,7 @@ from general_tools.file_editing.file_editing_tools import (
     CreateFileWithContent,
     LoadObjectFromPythonFile,
 )
+from general_tools.code_review.code_review_tools import CodeReview
 import tempfile
 from pathlib import Path
 import yaml
@@ -41,9 +42,10 @@ def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], w
         # PyomoCodeGeneration(),
         ListDir(working_directory),
         SeeFile(working_directory),
-        ModifyFile(working_directory),
+        # ModifyFile(working_directory),
         CreateFileWithContent(working_directory),
         LoadObjectFromPythonFile(working_directory),
+        CodeReview(working_directory, model_id),
     ]
     # Load the prompt template (using no knowledge base version)
     mathematical_optimizer_prompt_template = yaml.safe_load(
