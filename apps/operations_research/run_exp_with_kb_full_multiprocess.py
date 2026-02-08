@@ -147,7 +147,7 @@ def format_formulation_prompt(formulation: OptimizationFormulation) -> str:
     """
     prompt_parts = []
 
-    prompt_parts.append("Solve the following structured operations research problem:\n")
+    prompt_parts.append("Delegate the following operations research problem to the correct optimizer agent:\n")
 
     # Parameters section
     if formulation.parameters:
@@ -183,7 +183,13 @@ def format_formulation_prompt(formulation: OptimizationFormulation) -> str:
             prompt_parts.append(f"   Expression: {constraint.expression}")
             prompt_parts.append(f"   Variables: {', '.join(constraint.variables_involved)}")
 
-    prompt_parts.append("\n\nYou must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong.")
+    # prompt_parts.append("\n\nYou must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong.")
+
+    prompt_parts.append("\n\n## CRITICAL INSTRUCTIONS:")
+    prompt_parts.append("- You are the MANAGER. You MUST NOT solve this problem yourself. Do NOT write solver code, do NOT perform calculations, and do NOT reason about the solution.")
+    prompt_parts.append("- Your ONLY job is to delegate the COMPLETE problem above to the appropriate optimizer agent (mathematical_optimizer_agent, combinatorial_optimizer_agent, metaheuristic_optimizer_agent, or general_optimizer_agent) in your FIRST Code block.")
+    prompt_parts.append("- The optimizer agent will handle everything: saving parameters to JSON via create_file_with_content(), building the solver, executing it, and returning the result.")
+    prompt_parts.append("- Once the optimizer returns a result, extract the objective value and call final_answer() immediately. Do NOT re-solve or question the result.")
 
     return "\n".join(prompt_parts)
 
@@ -305,7 +311,7 @@ def process_single_problem(args_tuple):
                         print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
                         print(f"Falling back to raw problem text.")
                         # Fall back to original prompt if formulation fails
-                        prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+                        prompt = f"Delegate the following operations research problem to the correct optimizer agent:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
 
                     # Restore stdout/stderr
                     sys.stdout = original_stdout
@@ -314,7 +320,7 @@ def process_single_problem(args_tuple):
                     f_log.write(f"\n{'='*80}\n\n")
                 else:
                     # Use raw problem text if formulation is skipped
-                    prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+                    prompt = f"Delegate the following operations research problem to the correct optimizer agent:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
 
                 f_log.write(f"=== PHASE 1: PROBLEM SOLVING ===\n\n")
                 f_log.write(f"Prompt:\n{prompt}\n\n")
@@ -411,10 +417,10 @@ def process_single_problem(args_tuple):
                 print(f"Warning: Formulation extraction failed for problem {idx}: {e}")
                 print(f"Falling back to raw problem text.")
                 # Fall back to original prompt if formulation fails
-                prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+                prompt = f"Delegate the following operations research problem to the correct optimizer agent:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
         else:
             # Use raw problem text if formulation is skipped
-            prompt = f"Solve the following operations research problem:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
+            prompt = f"Delegate the following operations research problem to the correct optimizer agent:\n\n{question}\n\n You must return only the computed objective value (no explanation) as your final answer. Otherwise, the answer will be considered wrong."
 
         try:
             agent_response = manager_agent.run(prompt, reset=True)
@@ -574,7 +580,7 @@ def run_experiment(
         dataset_name = "easylp"
 
     # Create logs directory
-    log_dir = Path(output_path).parent / "logs" / "v12"
+    log_dir = Path(output_path).parent / "logs" / "v19"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Load all problems from dataset that are >= start_index
@@ -589,6 +595,9 @@ def run_experiment(
             # Skip problems before start_index
             if int(idx) < start_index:
                 continue
+
+            # if int(idx) not in [25,35,57]:
+            #     continue
 
             problems_to_process.append(item)
 
@@ -669,14 +678,14 @@ Mode options:
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v12").resolve()
+        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v19").resolve()
     if args.working_directory is None:
-        args.working_directory = Path(f"working_directory/{args.dataset}_{args.model_id.replace('/', '-')}_v12")
+        args.working_directory = Path(f"working_directory/{args.dataset}_{args.model_id.replace('/', '-')}_v19")
     if args.output is None:
         # Include mode in filename
-        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v12.jsonl").resolve()
+        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v19.jsonl").resolve()
 
-    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v12").resolve()
+    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v19").resolve()
 
     run_experiment(
         dataset_path=f"apps/operations_research/datasets/{args.dataset}/{args.dataset}.jsonl",
