@@ -2,7 +2,7 @@ from smolagents.tools import Tool
 import os
 import json
 from openai import OpenAI
-from typing import Any
+from typing import Any, Literal
 import importlib.util
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -14,8 +14,8 @@ load_dotenv()
 
 class CodeReviewResult(BaseModel):
     """Structured output for code review."""
-    Pass: bool
-    Explanation: str
+    score: Literal["accept", "weakly_accept", "borderline", "weakly_reject", "reject"]
+    explanation: str
 
 
 class CodeReview(Tool):
@@ -47,7 +47,7 @@ class CodeReview(Tool):
         """
         Read code from solve.py, parameters from parameters.json, and problem from problem.txt,
         along with the execution log from running the solver, then send them to the LLM for review.
-        Returns a string with Pass status and explanation.
+        Returns a string with score and explanation.
         """
         # Read the files
         solve_py_path = os.path.join(self.working_dir, "solve.py")
@@ -87,64 +87,45 @@ class CodeReview(Tool):
         # Combine all content
         full_content = "\n\n".join(content_parts)
 
-        # Send to OpenAI API with instructor for structured output
+        # Send to LLM for mathematical formulation review
         system_prompt = (
-        "You are a lead Operations Research Scientist and technical reviewer. "
-        "Your goal is to AUDIT optimization models (Pyomo/Gurobi/PuLP) for correctness, robustness, and logic. "
-        "You will be given the source code, parameters, problem description, AND the execution log "
-        "(which may contain solver output, tracebacks, or error messages). "
-        "Do not focus on trivial style issues (like variable naming preferences) unless they cause ambiguity. "
-        "Focus on MATHEMATICAL VALIDITY, BUSINESS LOGIC, and EXECUTION CORRECTNESS. "
-        "\n\n"
-        "CONDUCT YOUR REVIEW USING THIS HIERARCHICAL CHECKLIST:\n"
-        "\n"
-        "### TIER 0: EXECUTION RESULT ANALYSIS (The 'Did it run correctly?' Check)\n"
-        "0. **Execution Errors**: \n"
-        "   - If the execution log contains a traceback or error, identify the root cause (e.g., import errors, NameError, TypeError, solver failures). \n"
-        "   - Provide a specific fix for the error. \n"
-        "   - This is the HIGHEST PRIORITY. If the code crashed, focus on fixing the crash first.\n"
-        "1. **Solver Status**: \n"
-        "   - Did the solver return 'optimal'? If 'infeasible' or 'unbounded', diagnose which constraints or bounds are likely causing the issue.\n"
-        "2. **Result Sanity Check**: \n"
-        "   - Are the returned variable values and objective value reasonable given the problem description? \n"
-        "   - Do the results violate any obvious physical or business constraints (e.g., negative quantities, values exceeding capacity)?\n"
-        "\n"
-        "### TIER 1: SOLVER COMPATIBILITY & SYNTAX (The 'Will it run?' Check)\n"
-        "3. **Linearity & Convexity**: \n"
+        "You are an Operations Research reviewer. "
+        "You will be given an optimization problem description, solver code, parameters, and execution output. "
+        "Your ONLY job is to find actual errors in the mathematical formulation. "
+        "Do NOT comment on code style, naming, potential issues, or robustness. "
+        "ONLY report concrete formulation errors in the objective, constraints, or variables.\n\n"
+        "CHECK THE FOLLOWING:\n\n"
+        "### TIER 0: FORMULATION STRUCTURE\n"
+        "1. **Objective Function**: \n"
+        "   - Does the objective match what the problem asks for? \n"
+        "   - Are all cost/profit/penalty terms included with correct coefficients? \n"
+        "   - Is the optimization direction (minimize vs maximize) correct?\n"
+        "2. **Constraints**: \n"
+        "   - Are all constraints from the problem description present in the code? \n"
+        "   - Is each constraint mathematically correct (correct signs, indices, bounds)? \n"
+        "   - Are there missing constraints that the problem requires? \n"
+        "   - Are there extra constraints not stated in the problem?\n"
+        "3. **Decision Variables**: \n"
+        "   - Are variable types correct (continuous, integer, binary)? \n"
+        "   - Are variable bounds correct? Are all necessary variables defined?\n\n"
+        "### TIER 1: SOLVER COMPATIBILITY & FORMULATION VALIDITY\n"
+        "4. **Linearity & Convexity**: \n"
         "   - Are non-linear functions (`abs`, `max`, `min`, `floor`, `if/else`) applied directly to decision variables? \n"
-        "   - This is a CRITICAL FAIL for LP/MILP solvers. These logic must be modeled using binary variables or linear constraints.\n"
-        "4. **Index Alignment & Bounds**: \n"
-        "   - Check for Off-By-One errors (e.g., Python 0-index vs. Mathematical 1-index).\n"
+        "   - This is a CRITICAL error for LP/MILP solvers. These must be modeled using binary variables or linear constraints.\n"
+        "5. **Index Alignment & Bounds**: \n"
+        "   - Check for Off-By-One errors (e.g., Python 0-index vs. Mathematical 1-index). \n"
         "   - Are loop boundaries correct? (e.g., `range(T)` vs `range(1, T+1)`).\n"
-        "5. **Variable Domains**: \n"
-        "   - Are discrete decisions (e.g., number of trucks, yes/no decisions) modeled as `Integers` or `Binary`?\n"
-        "   - Are continuous quantities (e.g., money, water, time) modeled as `Reals`?\n"
-        "\n"
-        "### TIER 2: SYSTEM DYNAMICS & FLOW LOGIC (The 'Does it flow?' Check)\n"
-        "6. **Flow Balance & Conservation Laws**: \n"
-        "   - For any node/time-step: Does `Input + Previous_Storage == Output + Current_Storage`? \n"
-        "   - Resources (money, inventory, time) cannot appear or disappear by magic. \n"
-        "   - **FAIL** if specific time periods are modeled as isolated buckets without linking to previous/next periods.\n"
-        "7. **State Transition Continuity**: \n"
-        "   - Does the state at $t$ (e.g., inventory, location, fund balance) correctly depend on the state at $t-1$?\n"
-        "   - Check distinct 'Before Action' vs 'After Action' states if simultaneous events occur.\n"
-        "8. **Boundary Conditions**: \n"
-        "   - Are initial conditions ($t=0$) properly constrained?\n"
-        "   - Are end-of-horizon conditions ($t=T$) handled (e.g., minimum ending inventory)?\n"
-        "\n"
-        "### TIER 3: SEMANTIC & PHYSICAL REALITY (The 'Does it make sense?' Check)\n"
-        "9. **Objective Function Alignment**: \n"
-        "   - Does the minimization/maximization target represent the GLOBAL goal? \n"
-        "   - Beware of minimizing a local variable (e.g., 'Cost in Jan') instead of the global variable (e.g., 'Total Initial Investment' or 'Sum of Costs').\n"
-        "10. **Feasibility Buffers**: \n"
-        "   - Can the constraints theoretically be met? \n"
-        "\n"
-        "RESPONSE GUIDELINES:\n"
-        "- **Execution Errors First**: If the execution log shows a crash or traceback, diagnose and fix that before anything else.\n"
-        "- **Logic Second**: If execution succeeded but results look wrong, check for logic flaws (Tier 2 or 3).\n"
-        "- **Structural Fixes**: Do not just say 'Change variable X'. Say 'Refactor the constraint to track cumulative flow: S[t] = S[t-1] + ...'.\n"
-        "- **Pass criteria**: Return `Pass=True` ONLY if the execution succeeded with an optimal solution, the results are reasonable, "
-        "the model accurately represents the physical/economic reality described in the problem text, AND is mathematically correct."
+        "6. **Boundary Conditions**: \n"
+        "   - Are initial conditions (t=0) properly constrained? \n"
+        "   - Are end-of-horizon conditions (t=T) handled (e.g., minimum ending inventory)?\n\n"
+        "SCORING GUIDE:\n"
+        "- **accept**: The formulation correctly models the problem with no errors.\n"
+        "- **weakly_accept**: Minor issues unlikely to affect the optimal solution.\n"
+        "- **borderline**: Some constraints or terms may be slightly off, but the overall structure is correct.\n"
+        "- **weakly_reject**: One or more meaningful errors (e.g., missing constraint, wrong coefficient, wrong optimization direction).\n"
+        "- **reject**: Fundamental errors (e.g., wrong objective, missing key constraints, wrong variable types).\n\n"
+        "In your explanation, describe ONLY the concrete formulation errors you found. "
+        "If the formulation is correct, say so briefly."
         )
 
         result = self.client.chat.completions.create(
@@ -157,7 +138,7 @@ class CodeReview(Tool):
             temperature=1.0,
         )
 
-        return f"Code Review Result:\nPass: {result.Pass}\nExplanation: {result.Explanation}"
+        return f"Code Review Result:\nScore: {result.score}\n\nExplanation: {result.explanation}"
 
 
 def main():
