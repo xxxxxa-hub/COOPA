@@ -1,4 +1,5 @@
-from smolagents import LiteLLMModel, GradioUI, ToolCallingAgent, CodeAgent
+from smolagents import LiteLLMModel, GradioUI, ToolCallingAgent
+from src.agents import CodeAgent
 from smolagents.monitoring import LogLevel
 from pathlib import Path
 from dotenv import load_dotenv
@@ -187,7 +188,7 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
         name="or_agent",
         description="An agent that can solve operations research problems.",
         verbosity_level=LogLevel.DEBUG,
-        stream_outputs=True
+        stream_outputs=False
     )
     return manager_agent
 

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
-from smolagents import LiteLLMModel, tool, CodeAgent
-# from src.base_agent import CodeAgent
+from smolagents import LiteLLMModel, tool
+from src.agents import CodeAgent
 from smolagents.monitoring import LogLevel
 from dotenv import load_dotenv
 load_dotenv()
@@ -189,7 +189,9 @@ def format_formulation_prompt(formulation: OptimizationFormulation) -> str:
     prompt_parts.append("- You are the MANAGER. You MUST NOT solve this problem yourself. Do NOT write solver code, do NOT perform calculations, and do NOT reason about the solution.")
     prompt_parts.append("- Your ONLY job is to delegate the COMPLETE problem above to the appropriate optimizer agent (mathematical_optimizer_agent, combinatorial_optimizer_agent, metaheuristic_optimizer_agent, or general_optimizer_agent) in your FIRST Code block.")
     prompt_parts.append("- The optimizer agent will handle everything: saving parameters to JSON via create_file_with_content(), building the solver, executing it, and returning the result.")
-    prompt_parts.append("- Once the optimizer returns a result, extract the objective value and call final_answer() immediately. Do NOT re-solve or question the result.")
+    prompt_parts.append("- Do NOT call final_answer() in the same response where you call an optimizer agent. You MUST wait for the system to return the optimizer's REAL result first, then call final_answer() in a SEPARATE response.")
+    prompt_parts.append("- Your code block MUST start with EXACTLY ```py (three backticks followed by py). Do NOT omit the backticks. If you write just 'py' without backticks, the code will NOT execute and the delegation will FAIL.")
+    prompt_parts.append("- AFTER writing ```<end_code>, STOP IMMEDIATELY. Do NOT output any more text. Do NOT write 'Successfully executed', do NOT guess results, do NOT write the next Thought/Code block. Any text after ```<end_code> means you are hallucinating and your answer will be WRONG.")
 
     return "\n".join(prompt_parts)
 
