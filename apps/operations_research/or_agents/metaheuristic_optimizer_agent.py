@@ -1,4 +1,5 @@
-from smolagents import LiteLLMModel, CodeAgent
+from smolagents import LiteLLMModel
+from src.agents import CodeAgent
 from smolagents.monitoring import LogLevel
 from general_tools.file_editing.file_editing_tools import (
     ListDir,
@@ -86,7 +87,7 @@ def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
         model=model,
         name="metaheuristic_optimizer_agent",
         description=description,
-        stream_outputs=True
+        stream_outputs=False
     )
 
     return metaheuristic_optimizer_agent

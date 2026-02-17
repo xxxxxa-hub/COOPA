@@ -1,4 +1,5 @@
-from smolagents import LiteLLMModel, ToolCallingAgent, CodeAgent, GradioUI
+from smolagents import LiteLLMModel, ToolCallingAgent, GradioUI
+from src.agents import CodeAgent
 from smolagents.monitoring import LogLevel
 # from or_tools.pyomo_code_generation.pyomo_code_generation_tool import PyomoCodeGeneration
 from general_tools.file_editing.file_editing_tools import (
@@ -88,7 +89,7 @@ def create_mathematical_optimizer_agent(model_id="gpt-4.1", managed_agents=[], w
         model=model,
         name="mathematical_optimizer_agent",
         description=description,
-        stream_outputs=True
+        stream_outputs=False
     )
 
     return mathematical_optimizer_agent
