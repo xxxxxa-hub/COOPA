@@ -32,7 +32,7 @@ from general_tools.file_editing.file_editing_tools import (
 # import model utilities
 from .model_utils import build_model
 
-def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/operations_research/or_knowledge_base", index_dir="apps/operations_research/or_vector_store", working_directory=None, mode="retrieval"):
+def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/operations_research/or_knowledge_base", index_dir="apps/operations_research/or_vector_store", working_directory=None, mode="retrieval", use_code_review=True):
     """
     Create a manager agent for operations research problems.
 
@@ -117,7 +117,8 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
         managed_agents=managed_agents_for_optimizers,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG,
-        is_curation=use_curation_prompt
+        is_curation=use_curation_prompt,
+        use_code_review=use_code_review
     )
     # Create the combinatorial optimizer agent
     combinatorial_optimizer_agent = create_combinatorial_optimizer_agent(
@@ -125,7 +126,8 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
         managed_agents=managed_agents_for_optimizers,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG,
-        is_curation=use_curation_prompt
+        is_curation=use_curation_prompt,
+        use_code_review=use_code_review
     )
     # Create the metaheuristic optimizer agent
     metaheuristic_optimizer_agent = create_metaheuristic_optimizer_agent(
@@ -133,7 +135,8 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
         managed_agents=managed_agents_for_optimizers,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG,
-        is_curation=use_curation_prompt
+        is_curation=use_curation_prompt,
+        use_code_review=use_code_review
     )
     # Create the general optimizer agent
     general_optimizer_agent = create_general_optimizer_agent(
@@ -141,7 +144,8 @@ def create_manager_agent(model_id="gpt-4.1", knowledge_base_directory="apps/oper
         managed_agents=managed_agents_for_optimizers,
         working_directory=working_directory,
         verbosity_level=LogLevel.DEBUG,
-        is_curation=use_curation_prompt
+        is_curation=use_curation_prompt,
+        use_code_review=use_code_review
     )
 
     # Load the prompt template based on mode

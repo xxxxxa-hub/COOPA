@@ -20,7 +20,7 @@ from .web_browsing_agent import create_web_browsing_agent
 from ..model_utils import build_model
 
 
-def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO, is_curation=False):
+def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO, is_curation=False, use_code_review=True):
     """
     Create an agent that will solve heuristic and simulation-based optimization problems using pymoo.
     Args:
@@ -30,10 +30,13 @@ def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
         CodeAgent: The configured metaheuristic optimizer agent.
     """
     if is_curation:
-        path = "metaheuristic_optimizer_curation.yaml"
+        if use_code_review:
+            path = "metaheuristic_optimizer_curation.yaml"
+        else:
+            path = "metaheuristic_optimizer_curation_no_review.yaml"
     else:
         path = "metaheuristic_optimizer_retrieval.yaml"
-        
+
     # Load the prompt template (using no knowledge base version)
     metaheuristic_optimizer_prompt_template = yaml.safe_load(
                 importlib.resources.files("apps.operations_research.or_agents.prompts").joinpath(path).read_text(encoding="utf-8")
@@ -45,8 +48,9 @@ def create_metaheuristic_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
         # ModifyFile(working_directory),
         CreateFileWithContent(working_directory),
         LoadObjectFromPythonFile(working_directory),
-        CodeReview(working_directory, model_id),
     ]
+    if use_code_review:
+        tools.append(CodeReview(working_directory, model_id))
 
     model = build_model(model_id)
     description = """

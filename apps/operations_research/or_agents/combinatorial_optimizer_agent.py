@@ -19,7 +19,7 @@ from .web_browsing_agent import create_web_browsing_agent
 # import model utilities
 from ..model_utils import build_model
 
-def create_combinatorial_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO, is_curation=False):
+def create_combinatorial_optimizer_agent(model_id="gpt-4.1", managed_agents=[], working_directory="working_directory", max_steps=20, verbosity_level=LogLevel.INFO, is_curation=False, use_code_review=True):
     """
     Create an agent that will solve combinatorial optimization problems using Google's OR-Tools.
     Args:
@@ -29,10 +29,13 @@ def create_combinatorial_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
         CodeAgent: The configured combinatorial optimizer agent.
     """
     if is_curation:
-        path = "combinatorial_optimizer_curation.yaml"
+        if use_code_review:
+            path = "combinatorial_optimizer_curation.yaml"
+        else:
+            path = "combinatorial_optimizer_curation_no_review.yaml"
     else:
         path = "combinatorial_optimizer_retrieval.yaml"
-        
+
     tools = [
         # Add your OR-Tools code generation tool here if available, e.g. ORToolsCodeGeneration(),
         ListDir(working_directory),
@@ -40,8 +43,9 @@ def create_combinatorial_optimizer_agent(model_id="gpt-4.1", managed_agents=[], 
         # ModifyFile(working_directory),
         CreateFileWithContent(working_directory),
         LoadObjectFromPythonFile(working_directory),
-        CodeReview(working_directory, model_id),
     ]
+    if use_code_review:
+        tools.append(CodeReview(working_directory, model_id))
 
     model = build_model(model_id)
 
