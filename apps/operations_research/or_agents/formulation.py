@@ -396,7 +396,7 @@ def extract_formulation(
 
     # Set parameters for Qwen model
     kwargs = {}
-    if any(x in model for x in ["gemini", "thinking"]):
+    if any(x in model for x in ["gemini"]): # thinking
         kwargs.update({"extra_body":{"reasoning": {"effort": "high"}}})
     elif any(x in model for x in ["o3", "o4", "gpt-5"]):
         kwargs.update({"reasoning_effort": "high"})
