@@ -209,7 +209,8 @@ def process_single_problem(args_tuple):
     """
     (item, model_id, knowledge_base_directory, index_dir, mode,
      log_to_file, log_dir, dataset_name, output_path, skip_formulation,
-     use_iterative_refinement, max_refinement_iterations, working_directory) = args_tuple
+     use_iterative_refinement, max_refinement_iterations, working_directory,
+     use_code_review) = args_tuple
 
     # Normalize dataset item keys to handle different formats (BWOR vs industryor)
     normalized_item = normalize_dataset_item(item)
@@ -228,6 +229,7 @@ def process_single_problem(args_tuple):
         index_dir=index_dir,
         working_directory=str(problem_working_directory),
         mode=mode,
+        use_code_review=use_code_review,
     )
 
     if log_to_file:
@@ -338,7 +340,7 @@ def process_single_problem(args_tuple):
                 try:
                     agent_response = manager_agent.run(prompt, reset=True)
                     # Try to extract a number from the response
-                    match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
+                    match = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", str(agent_response))
                     if match:
                         predicted = float(match.group())
                         correct = abs(predicted - float(gold_answer)) < 0.1
@@ -427,7 +429,7 @@ def process_single_problem(args_tuple):
         try:
             agent_response = manager_agent.run(prompt, reset=True)
             # Try to extract a number from the response
-            match = re.search(r"[-+]?\d*\.\d+|\d+", str(agent_response))
+            match = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", str(agent_response))
             if match:
                 predicted = float(match.group())
                 correct = abs(predicted - float(gold_answer)) < 0.1
@@ -504,7 +506,7 @@ def process_single_problem(args_tuple):
         "question": question,
         "gold_answer": gold_answer,
         "predicted_answer": predicted,
-        "agent_response": agent_response,
+        "agent_response": str(agent_response),
         "correct": correct,
     }
 
@@ -531,7 +533,8 @@ def run_experiment(
     num_processes=None,
     skip_formulation=False,
     use_iterative_refinement=False,
-    max_refinement_iterations=3
+    max_refinement_iterations=3,
+    use_code_review=True
 ):
     """
     Run experiments on the full dataset.
@@ -582,7 +585,7 @@ def run_experiment(
         dataset_name = "easylp"
 
     # Create logs directory
-    log_dir = Path(output_path).parent / "logs" / "v19"
+    log_dir = Path(output_path).parent / "logs" / "v21_no_iteration_code_review"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Load all problems from dataset that are >= start_index
@@ -609,7 +612,8 @@ def run_experiment(
     args_list = [
         (item, model_id, knowledge_base_directory, index_dir, mode,
          log_to_file, log_dir, dataset_name, output_path, skip_formulation,
-         use_iterative_refinement, max_refinement_iterations, working_directory)
+         use_iterative_refinement, max_refinement_iterations, working_directory,
+         use_code_review)
         for item in problems_to_process
     ]
 
@@ -626,7 +630,7 @@ def run_experiment(
         for result in pool.imap_unordered(process_single_problem, args_list):
             # Write results incrementally as they complete
             with open(output_path, "a", encoding="utf-8") as out_f:
-                out_f.write(json.dumps(result) + "\n")
+                out_f.write(json.dumps(result, default=str) + "\n")
 
     print(f"Experiment finished. Results saved to {output_path}.")
 
@@ -663,10 +667,12 @@ Mode options:
                        help="Number of parallel processes to use (default: number of CPU cores)")
     parser.add_argument("--skip_formulation", action="store_true",
                        help="Skip formulation extraction and use raw problem text directly")
-    parser.add_argument("--use_iterative_refinement", action="store_true", default=True,
+    parser.add_argument("--use_iterative_refinement", action="store_true", default=False,
                        help="Use iterative refinement with confidence evaluation for formulation extraction")
     parser.add_argument("--max_refinement_iterations", type=int, default=3,
                        help="Maximum number of refinement iterations (default: 3)")
+    parser.add_argument("--no_code_review", action="store_true",
+                       help="Disable code review tool for optimizer agents (default: code review enabled)")
     args = parser.parse_args()
 
     # Determine mode from arguments
@@ -680,14 +686,14 @@ Mode options:
     cur_date_time = get_current_timestamp()
 
     if args.knowledge_base_directory is None:
-        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v19").resolve()
+        args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_v21_no_iteration_code_review").resolve()
     if args.working_directory is None:
-        args.working_directory = Path(f"working_directory/{args.dataset}_{args.model_id.replace('/', '-')}_v19")
+        args.working_directory = Path(f"working_directory/{args.dataset}_{args.model_id.replace('/', '-')}_v21_no_iteration_code_review")
     if args.output is None:
         # Include mode in filename
-        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v19.jsonl").resolve()
+        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_v21_no_iteration_code_review.jsonl").resolve()
 
-    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v19").resolve()
+    index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_v21_no_iteration_code_review").resolve()
 
     run_experiment(
         dataset_path=f"apps/operations_research/datasets/{args.dataset}/{args.dataset}.jsonl",
@@ -704,4 +710,5 @@ Mode options:
         skip_formulation=args.skip_formulation,
         use_iterative_refinement=args.use_iterative_refinement,
         max_refinement_iterations=args.max_refinement_iterations,
+        use_code_review=not args.no_code_review,
     )
