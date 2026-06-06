@@ -1,3 +1,36 @@
+# COOPA
+
+COOPA is a multi-agent framework for solving operations research and optimization
+problems with large language models. A manager agent orchestrates specialized
+optimizer agents (mathematical / algebraic, combinatorial, metaheuristic, and
+general-purpose) together with a curated, retrieval-augmented knowledge base, so
+that solutions discovered on training problems can be reused on new ones.
+
+The flagship application lives in [`apps/operations_research/`](apps/operations_research/),
+which contains the agents, prompts, tools, and experiment runners used to evaluate
+the system across standard OR benchmarks (`nlp4lp`, `nlp4opt`, `industryor`,
+`complexlp`, `BWOR`).
+
+## Repository Structure
+
+```
+COOPA/
+├── apps/
+│   └── operations_research/   # OR agent app: agents, prompts, tools, experiment runners
+│       ├── or_agents/         # Optimizer + curation/retrieval agents and their prompts
+│       ├── or_tools/          # Solver code-generation utilities (Pyomo, OR-Tools, pymoo)
+│       └── run_exp_*.py       # Experiment entry points (curation / retrieval / ablations)
+├── src/                       # Core agent framework (base agent, executors, monitoring)
+├── general_tools/             # Shared tools: knowledge-base management, web browsing,
+│                              #   file editing, code review, arXiv fetching
+├── requirements.txt
+└── README.md
+```
+
+> **Note:** Large experiment outputs (`apps/operations_research/datasets/` result
+> directories and `knowledge_base/`) are not tracked in git. See the per-app README
+> for how to obtain or regenerate them.
+
 ## Setup Instructions
 
 ### 1. Clone the Repository
