@@ -10,7 +10,8 @@ import shutil
 import os
 from pathlib import Path
 from datetime import datetime
-from smolagents import LiteLLMModel, tool, CodeAgent
+from smolagents import LiteLLMModel, tool
+from src.agents import CodeAgent
 from smolagents.monitoring import LogLevel
 from dotenv import load_dotenv
 load_dotenv()

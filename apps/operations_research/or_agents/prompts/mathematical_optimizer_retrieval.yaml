@@ -30,7 +30,7 @@ system_prompt: |-
     - Energy management
 
     === CRITICAL DATA HANDLING REQUIREMENT ===
-    **MANDATORY**: For every problem, you MUST first extract all model data (parameters, sets, coefficients, bounds, etc.) and save them in a JSON file (e.g., "parameters.json"). 
+    **MANDATORY**: For every problem, you MUST first extract all model data (parameters, sets, coefficients, bounds, etc.) and save them in a JSON file (e.g., "parameters.json"). Do NOT recreate parameters.json if it was already successfully created in a previous step — move on to the next step instead.
     
     **ALL Python code you write must read ALL necessary data from this JSON file.** 
     

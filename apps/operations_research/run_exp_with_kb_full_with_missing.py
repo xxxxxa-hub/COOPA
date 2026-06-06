@@ -28,6 +28,8 @@ import os
 import shutil
 import multiprocessing
 from multiprocessing import Pool, Lock
+import time
+import threading
 
 from datetime import datetime
 from .run import create_manager_agent
@@ -67,6 +69,63 @@ class CleanOutputFile:
 
     def __getattr__(self, name):
         return getattr(self.file, name)
+
+class APIMetricsTracker(litellm.integrations.custom_logger.CustomLogger):
+    """Thread-local litellm callback that records per-question API metrics.
+
+    Tracks:
+      - Number of API calls
+      - Input / reasoning / output tokens
+      - Total cost (via litellm.completion_cost)
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._lock = threading.Lock()
+        self.reset()
+
+    def reset(self):
+        with self._lock:
+            self.api_call_count = 0
+            self.total_input_tokens = 0
+            self.total_reasoning_tokens = 0
+            self.total_output_tokens = 0
+            self.total_cost = 0.0
+
+    def log_success_event(self, kwargs, response_obj, start_time, end_time):
+        """Called by litellm after every successful completion call."""
+        with self._lock:
+            self.api_call_count += 1
+
+            # Extract token counts from the response usage object
+            usage = getattr(response_obj, "usage", None)
+            if usage is not None:
+                self.total_input_tokens += getattr(usage, "prompt_tokens", 0) or 0
+                self.total_output_tokens += getattr(usage, "completion_tokens", 0) or 0
+
+                # Reasoning tokens live inside completion_tokens_details
+                details = getattr(usage, "completion_tokens_details", None)
+                if details is not None:
+                    self.total_reasoning_tokens += getattr(details, "reasoning_tokens", 0) or 0
+
+            # Cost
+            try:
+                cost = litellm.completion_cost(completion_response=response_obj)
+                self.total_cost += cost
+            except Exception:
+                pass  # pricing info may not be available for every model
+
+    def get_metrics(self):
+        with self._lock:
+            return {
+                "api_call_count": self.api_call_count,
+                "input_tokens": self.total_input_tokens,
+                "reasoning_tokens": self.total_reasoning_tokens,
+                "output_tokens": self.total_output_tokens,
+                "total_tokens": self.total_input_tokens + self.total_output_tokens,
+                "total_cost_usd": round(self.total_cost, 6),
+            }
+
 
 def get_current_timestamp():
     now = datetime.now()
@@ -206,6 +265,11 @@ def process_single_problem(args_tuple):
         mode=mode,
         use_code_review=use_code_review,
     )
+
+    # Set up per-question API metrics tracking
+    metrics_tracker = APIMetricsTracker()
+    litellm.callbacks.append(metrics_tracker)
+    wall_clock_start = time.time()
 
     if log_to_file:
         # Create log file for this question
@@ -476,6 +540,14 @@ def process_single_problem(args_tuple):
                 f_log.write(f"=== PHASE 2: KNOWLEDGE CURATION ===\n\n")
                 f_log.write(f"Knowledge curation SKIPPED - solution is INCORRECT\n")
 
+    # Collect metrics and remove the per-question callback
+    wall_clock_seconds = round(time.time() - wall_clock_start, 2)
+    api_metrics = metrics_tracker.get_metrics()
+    try:
+        litellm.callbacks.remove(metrics_tracker)
+    except ValueError:
+        pass
+
     result = {
         "index": idx,
         "question": question,
@@ -483,13 +555,20 @@ def process_single_problem(args_tuple):
         "predicted_answer": predicted,
         "agent_response": str(agent_response),
         "correct": correct,
+        "wall_clock_seconds": wall_clock_seconds,
+        "api_metrics": api_metrics,
     }
 
     # Add formulation confidence data if available
     if formulation_confidence_data is not None:
         result["formulation_confidence"] = formulation_confidence_data
 
-    print(f"Problem {idx}: Correct={correct} | Gold={gold_answer} | Predicted={predicted}")
+    print(
+        f"Problem {idx}: Correct={correct} | Gold={gold_answer} | Predicted={predicted} "
+        f"| Time={wall_clock_seconds}s | Calls={api_metrics['api_call_count']} "
+        f"| Tokens(in/reason/out)={api_metrics['input_tokens']}/{api_metrics['reasoning_tokens']}/{api_metrics['output_tokens']} "
+        f"| Cost=${api_metrics['total_cost_usd']}"
+    )
 
     return result
 
@@ -564,9 +643,13 @@ def run_experiment(
         dataset_name = "complexlp"
     elif "easylp" in dataset_path:
         dataset_name = "easylp"
+    elif "optibench" in dataset_path:
+        dataset_name = "optibench"
+    elif "car_side_impact" in dataset_path:
+        dataset_name = "car_side_impact"
 
     # Create logs directory
-    log_dir = Path(output_path).parent / "logs" / log_version
+    log_dir = Path(output_path).parent / "logs" / f"{log_version}_rerun"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     # Load all problems from dataset that match the indices filter
@@ -646,14 +729,14 @@ Mode options:
                        help="Number of parallel processes to use (default: number of CPU cores)")
     parser.add_argument("--skip_formulation", action="store_true",
                        help="Skip formulation extraction and use raw problem text directly")
-    parser.add_argument("--use_iterative_refinement", action="store_true", default=False,
+    parser.add_argument("--use_iterative_refinement", action="store_true", default=True,
                        help="Use iterative refinement with confidence evaluation for formulation extraction")
     parser.add_argument("--max_refinement_iterations", type=int, default=3,
                        help="Maximum number of refinement iterations (default: 3)")
     parser.add_argument("--no_code_review", action="store_true",
                        help="Disable code review tool for optimizer agents (default: code review enabled)")
-    parser.add_argument("--log_version", type=str, default="v21_no_iteration_code_review",
-                       help="Log subdirectory name (default: v21_no_iteration_code_review)")
+    parser.add_argument("--log_version", type=str, default="v22_no_code_review",
+                       help="Log subdirectory name (default: v22_no_code_review)")
     args = parser.parse_args()
 
     # Determine mode from arguments
@@ -671,10 +754,10 @@ Mode options:
     if args.knowledge_base_directory is None:
         args.knowledge_base_directory = Path(f"apps/operations_research/or_knowledge_base_{args.dataset}_{args.model_id.replace('/', '-')}_{log_version}").resolve()
     if args.working_directory is None:
-        args.working_directory = Path(f"working_directory/{args.dataset}_{args.model_id.replace('/', '-')}_{log_version}")
+        args.working_directory = Path(f"working_directory/{args.dataset}_{args.model_id.replace('/', '-')}_{log_version}_rerun")
     if args.output is None:
-        # Include mode in filename
-        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_{log_version}.jsonl").resolve()
+        # Include mode in filename — uses _rerun suffix to avoid overwriting existing results
+        args.output = Path(f"apps/operations_research/datasets/{args.dataset}_{args.model_id.replace('/', '-')}/experiment_results_{cur_date_time}_{mode}_{log_version}_rerun.jsonl").resolve()
 
     index_dir = Path(f"apps/operations_research/or_vector_store_{args.dataset}_{args.model_id.replace('/', '-')}_{log_version}").resolve()
 

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
-from smolagents import LiteLLMModel, tool, CodeAgent
-# from src.base_agent import CodeAgent
+from smolagents import LiteLLMModel, tool
+from src.agents import CodeAgent
 from smolagents.monitoring import LogLevel
 from dotenv import load_dotenv
 load_dotenv()

@@ -1,4 +1,5 @@
-from smolagents import LiteLLMModel, ToolCallingAgent, CodeAgent, GradioUI
+from smolagents import LiteLLMModel, ToolCallingAgent, GradioUI
+from src.agents import CodeAgent
 from smolagents.monitoring import LogLevel
 from general_tools.kb_repo_management.repo_indexer import RepoIndexer
 from general_tools.kb_repo_management.kb_repo_retrieval_tools import (
