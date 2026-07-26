@@ -126,13 +126,13 @@ def apply_evidence_consistency_penalties(
 
 
 def formulation_selection_key(entry: Dict[str, Any], history_index: int) -> tuple:
-    """Rank candidates by grounded weakest-link quality, then raw quality and recency."""
+    """Rank candidates by grounded quality, preferring the earlier candidate on ties."""
     evaluation = entry["evaluation"]
     return (
         min(entry["min_confidence"], evaluation.evidence_consistency),
         evaluation.evidence_consistency,
         entry["overall_confidence"],
-        history_index,
+        -history_index,
     )
 
 
@@ -176,13 +176,18 @@ Please evaluate the confidence (0-100) for each of the following components:
 For each component, provide a confidence score from 0-100 and a brief explanation.
 
 SOURCE-CONSISTENCY RULES:
-- Treat the raw question as authoritative. A plausible or conventional modeling choice is
-  not evidence.
+- Treat the raw question as authoritative, including the ordinary mathematical meaning
+  of its terminology, tables, units, and requested task. Do not demand that every
+  standard implication be restated as a separate sentence.
 - Check that each displayed Evidence quote actually supports the full modeling choice,
   rather than merely mentioning the same entity.
 - Classify a choice as an `unsupported_semantic_assumption` only when it adds,
   strengthens, or reinterprets source meaning AND changing that choice could change the
   feasible set, objective values, objective ranking, or requested numerical answer.
+- Do not classify an interpretation as unsupported merely because an implied unit,
+  dependency, domain, or task convention is not spelled out. Flag it only when it
+  conflicts with the ordinary reading or materially narrows that reading without
+  textual support.
 - A `material_ambiguity` must identify at least two textually defensible interpretations
   and quote the source wording that supports each interpretation. It must also explain
   how they could change the optimization result. Silence alone does not support an
@@ -301,8 +306,9 @@ Please create a REFINED formulation that addresses all the identified issues fro
 2. All decision variables are properly defined with correct domains
 3. The objective function correctly represents what needs to be optimized
 4. All necessary constraints are included and correctly formulated
-5. Every material modeling choice is supported by the original problem. Do not add,
-   strengthen, or reinterpret requirements using unstated conventions.
+5. Preserve source-supported choices from earlier attempts. Change semantics only to fix
+   a concrete unsupported addition or conflict identified in the feedback; missing
+   restatement of an ordinary task implication is not by itself a reason to rewrite.
 
 Provide the complete refined formulation."""
 
@@ -476,7 +482,7 @@ def extract_formulation_with_refinement(
     # 1. Highest source-consistent weakest-component confidence
     # 2. Prefer candidates without unresolved issues
     # 3. Highest evidence consistency and overall confidence
-    # 4. Latest iteration when otherwise tied
+    # 4. Earliest iteration when otherwise tied, to avoid unnecessary semantic drift
     if not formulation_history:
         raise ValueError("No formulations were evaluated")
 
@@ -489,7 +495,7 @@ def extract_formulation_with_refinement(
     if verbose:
         print(f"\n{'=' * 80}")
         print("SELECTING BEST FORMULATION FROM HISTORY")
-        print("Criteria: Source-consistent min score, unresolved status, consistency, overall, recency")
+        print("Criteria: Source-consistent min score, consistency, overall, then earliest iteration")
         print('=' * 80)
         print(f"\nEvaluated {len(formulation_history)} formulation(s) across {best_entry['iteration']} iteration(s)")
         print("\nConfidence scores by iteration:")

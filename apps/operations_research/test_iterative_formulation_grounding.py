@@ -112,6 +112,26 @@ def test_selection_prefers_grounded_candidate_over_higher_raw_scores():
     assert best == 1
 
 
+def test_selection_prefers_earlier_candidate_on_exact_tie():
+    evaluation = _evaluation(score=95)
+    entries = [
+        {
+            "evaluation": evaluation,
+            "min_confidence": 95,
+            "overall_confidence": 95,
+        },
+        {
+            "evaluation": evaluation,
+            "min_confidence": 95,
+            "overall_confidence": 95,
+        },
+    ]
+
+    best = max(range(len(entries)), key=lambda i: formulation_selection_key(entries[i], i))
+
+    assert best == 0
+
+
 def test_material_ambiguity_is_flagged_without_calling_it_unsupported():
     evaluation = _evaluation(
         score=95,
