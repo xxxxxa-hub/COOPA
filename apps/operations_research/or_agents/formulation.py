@@ -141,13 +141,26 @@ class ComponentConfidence(BaseModel):
 
     confidence: int = Field(..., ge=0, le=100, description="Confidence score from 0-100")
     explanation: str = Field(..., description="Brief explanation of the score")
-    unsupported_assumptions: List[str] = Field(
+    unsupported_semantic_assumptions: List[str] = Field(
         default_factory=list,
-        description="Modeling choices in this component that are not supported by an exact quote",
+        description=(
+            "Unsupported claims that can change the feasible set, objective values, "
+            "objective ranking, or requested answer"
+        ),
     )
-    ambiguities: List[str] = Field(
+    material_ambiguities: List[str] = Field(
         default_factory=list,
-        description="Material ambiguities in the question that affect this component",
+        description=(
+            "Alternative source interpretations that can change the feasible set, "
+            "objective values, objective ranking, or requested answer"
+        ),
+    )
+    representational_choices: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Answer-preserving mathematical encodings or implementation choices; "
+            "these are informational and are not evidence-consistency errors"
+        ),
     )
 
 
@@ -168,7 +181,7 @@ class FormulationEvaluation(BaseModel):
     )
     has_unresolved_issues: bool = Field(
         False,
-        description="Whether unsupported assumptions or material ambiguities remain",
+        description="Whether unsupported semantic assumptions or material ambiguities remain",
     )
 
     # @model_validator(mode="after")

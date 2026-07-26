@@ -14,12 +14,13 @@ from apps.operations_research.or_agents.iterative_formulation import (
 )
 
 
-def _component(score=95, unsupported=None, ambiguities=None):
+def _component(score=95, unsupported=None, ambiguities=None, representations=None):
     return ComponentConfidence(
         confidence=score,
         explanation="test",
-        unsupported_assumptions=unsupported or [],
-        ambiguities=ambiguities or [],
+        unsupported_semantic_assumptions=unsupported or [],
+        material_ambiguities=ambiguities or [],
+        representational_choices=representations or [],
     )
 
 
@@ -80,9 +81,9 @@ def test_unsupported_assumption_is_deterministically_capped_and_flagged():
 
     result = apply_evidence_consistency_penalties(evaluation)
 
-    assert result.decision_variables.confidence == 70
-    assert result.evidence_consistency == 60
-    assert result.overall_confidence == 60
+    assert result.decision_variables.confidence == 80
+    assert result.evidence_consistency == 80
+    assert result.overall_confidence == 80
     assert result.has_unresolved_issues is True
 
 
@@ -119,9 +120,9 @@ def test_material_ambiguity_is_flagged_without_calling_it_unsupported():
 
     result = apply_evidence_consistency_penalties(evaluation)
 
-    assert result.decision_variables.confidence == 95
-    assert result.evidence_consistency == 80
-    assert result.overall_confidence == 80
+    assert result.decision_variables.confidence == 90
+    assert result.evidence_consistency == 90
+    assert result.overall_confidence == 90
     assert result.has_unresolved_issues is True
 
 
@@ -132,3 +133,52 @@ def test_low_confidence_candidate_is_never_returned_as_unflagged():
 
     assert result.overall_confidence == 72
     assert result.has_unresolved_issues is True
+
+
+def test_answer_preserving_representation_is_not_penalized():
+    evaluation = FormulationEvaluation(
+        parameters=_component(),
+        decision_variables=_component(
+            representations=["Uses binary assignment variables instead of named choices."]
+        ),
+        objective=_component(),
+        constraints=_component(
+            representations=["Uses an equivalent linear implication encoding."]
+        ),
+        overall_confidence=95,
+        overall_assessment="test",
+        evidence_consistency=95,
+    )
+
+    result = apply_evidence_consistency_penalties(evaluation)
+
+    assert result.evidence_consistency == 95
+    assert result.overall_confidence == 95
+    assert result.has_unresolved_issues is False
+
+
+def test_penalties_scale_instead_of_saturating_every_candidate():
+    one_issue = _evaluation(score=98, unsupported=["Changes the feasible set."])
+    two_issues = _evaluation(
+        score=98,
+        unsupported=["Changes the feasible set.", "Changes the objective ranking."],
+    )
+
+    apply_evidence_consistency_penalties(one_issue)
+    apply_evidence_consistency_penalties(two_issues)
+
+    assert one_issue.evidence_consistency == 80
+    assert two_issues.evidence_consistency == 60
+
+
+def test_many_reported_issues_do_not_collapse_consistency_to_zero():
+    evaluation = _evaluation(
+        score=98,
+        unsupported=[f"semantic issue {i}" for i in range(5)],
+        ambiguities=[f"material ambiguity {i}" for i in range(5)],
+    )
+
+    result = apply_evidence_consistency_penalties(evaluation)
+
+    assert result.evidence_consistency == 40
+    assert result.overall_confidence == 40

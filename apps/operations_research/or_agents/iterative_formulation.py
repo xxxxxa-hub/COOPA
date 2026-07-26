@@ -98,16 +98,27 @@ def apply_evidence_consistency_penalties(
     unsupported = []
     ambiguities = []
     for component in components:
-        unsupported.extend(component.unsupported_assumptions)
-        ambiguities.extend(component.ambiguities)
-        if component.unsupported_assumptions:
-            component.confidence = min(component.confidence, 70)
+        component_unsupported = component.unsupported_semantic_assumptions
+        component_ambiguities = component.material_ambiguities
+        unsupported.extend(component_unsupported)
+        ambiguities.extend(component_ambiguities)
+        component_cap = (
+            100
+            - 20 * min(len(component_unsupported), 2)
+            - 10 * min(len(component_ambiguities), 2)
+        )
+        component.confidence = min(component.confidence, max(0, component_cap))
 
-    if unsupported:
-        evaluation.evidence_consistency = min(evaluation.evidence_consistency, 60)
-        evaluation.has_unresolved_issues = True
-    elif ambiguities:
-        evaluation.evidence_consistency = min(evaluation.evidence_consistency, 80)
+    if unsupported or ambiguities:
+        consistency_cap = (
+            100
+            - 20 * min(len(unsupported), 2)
+            - 10 * min(len(ambiguities), 2)
+        )
+        evaluation.evidence_consistency = min(
+            evaluation.evidence_consistency,
+            max(0, consistency_cap),
+        )
         evaluation.has_unresolved_issues = True
 
     component_min = min(component.confidence for component in components)
@@ -177,13 +188,29 @@ SOURCE-CONSISTENCY RULES:
   not evidence.
 - Check that each displayed Evidence quote actually supports the full modeling choice,
   rather than merely mentioning the same entity.
-- Compare every material semantic choice in the formulation against the raw question.
-  Do not accept information that was added, strengthened, or reinterpreted without
-  textual support.
-- Put every unsupported choice in that component's `unsupported_assumptions`. Put
-  unresolved wording with multiple defensible interpretations in `ambiguities`.
-- An unsupported assumption must cap that component at 70 or below. Ambiguity must not
-  be silently resolved by choosing whichever interpretation seems convenient.
+- Classify a choice as an `unsupported_semantic_assumption` only when it adds,
+  strengthens, or reinterprets source meaning AND changing that choice could change the
+  feasible set, objective values, objective ranking, or requested numerical answer.
+- A `material_ambiguity` must identify at least two textually defensible interpretations
+  and quote the source wording that supports each interpretation. It must also explain
+  how they could change the optimization result. Silence alone does not support an
+  alternative interpretation.
+- Mathematical encodings that preserve the same optimization problem belong in
+  `representational_choices`; they are not unsupported assumptions and must not reduce
+  confidence. Do not require the question to prescribe variable names, algebraic
+  encodings, linearizations, solver formulations, or implementation mechanisms.
+- Use closed-world benchmark semantics: the supplied description defines the modeled
+  world. Do not hypothesize hidden mechanisms, entities, ingredients, losses, demand,
+  inventory, interactions, constraints, or costs merely because they could exist in a
+  real application. Their absence from the question means they are outside the model,
+  not unresolved.
+- Treat the entities, alternatives, and numerical tables supplied by the question as the
+  problem instance, unless the text indicates that they are illustrative or incomplete.
+- Read quantities, rates, compositions, revenues, costs, and totals according to their
+  ordinary mathematical and dimensional meaning when the text provides no competing
+  interpretation.
+- Report each underlying issue once. Do not repeat the same assumption or ambiguity in
+  multiple components or rephrase one issue as several separate entries.
 - Set `evidence_consistency` to reflect source support across the whole formulation
   and set `has_unresolved_issues=true` if any unsupported assumption or material ambiguity
   remains. Explain the concrete issue in `overall_assessment`.
@@ -259,16 +286,22 @@ def refine_formulation(
                 ("Objective", past_evaluation.objective),
                 ("Constraints", past_evaluation.constraints),
             ):
-                if component.unsupported_assumptions:
+                if component.unsupported_semantic_assumptions:
                     history_section += (
-                        f"- Unsupported assumptions ({component_name}): "
-                        + "; ".join(component.unsupported_assumptions)
+                        f"- Unsupported semantic assumptions ({component_name}): "
+                        + "; ".join(component.unsupported_semantic_assumptions)
                         + "\n"
                     )
-                if component.ambiguities:
+                if component.material_ambiguities:
                     history_section += (
-                        f"- Ambiguities ({component_name}): "
-                        + "; ".join(component.ambiguities)
+                        f"- Material ambiguities ({component_name}): "
+                        + "; ".join(component.material_ambiguities)
+                        + "\n"
+                    )
+                if component.representational_choices:
+                    history_section += (
+                        f"- Answer-preserving representations ({component_name}): "
+                        + "; ".join(component.representational_choices)
                         + "\n"
                     )
 
