@@ -249,16 +249,11 @@ Guidelines:
 - Decision variables must capture domains precisely (binary/integer/continuous, bounds,
   logical implications). Use SourceReference entries quoting the sentence that motivated
   the variable or domain.
-- The prompt is the only authority. Every material modeling choice must be justified by
-  the text; do not add, strengthen, or reinterpret requirements using unstated conventions.
 - The `objective.expression` should be an algebraic description that references variable
   names, and `variables_involved` must list those variable identifiers.
 - Each constraint gets its own entry. Use algebraic expressions when possible; fall back
   to `logical` for implications. Every constraint needs a SourceReference quoting the
   relevant requirement.
-- A SourceReference quote must support the full element, not merely mention the same
-  entity. If wording is ambiguous, use the least restrictive defensible interpretation
-  and record the unresolved ambiguity in the source note.
 Return valid JSON only. Do not add fields.
 """
 

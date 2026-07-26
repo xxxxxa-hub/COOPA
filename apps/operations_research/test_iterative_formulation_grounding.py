@@ -120,9 +120,9 @@ def test_material_ambiguity_is_flagged_without_calling_it_unsupported():
 
     result = apply_evidence_consistency_penalties(evaluation)
 
-    assert result.decision_variables.confidence == 90
-    assert result.evidence_consistency == 90
-    assert result.overall_confidence == 90
+    assert result.decision_variables.confidence == 95
+    assert result.evidence_consistency == 95
+    assert result.overall_confidence == 95
     assert result.has_unresolved_issues is True
 
 
@@ -171,7 +171,7 @@ def test_penalties_scale_instead_of_saturating_every_candidate():
     assert two_issues.evidence_consistency == 60
 
 
-def test_many_reported_issues_do_not_collapse_consistency_to_zero():
+def test_many_semantic_issues_do_not_collapse_consistency_to_zero():
     evaluation = _evaluation(
         score=98,
         unsupported=[f"semantic issue {i}" for i in range(5)],
@@ -180,5 +180,5 @@ def test_many_reported_issues_do_not_collapse_consistency_to_zero():
 
     result = apply_evidence_consistency_penalties(evaluation)
 
-    assert result.evidence_consistency == 40
-    assert result.overall_confidence == 40
+    assert result.evidence_consistency == 60
+    assert result.overall_confidence == 60

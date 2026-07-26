@@ -99,26 +99,19 @@ def apply_evidence_consistency_penalties(
     ambiguities = []
     for component in components:
         component_unsupported = component.unsupported_semantic_assumptions
-        component_ambiguities = component.material_ambiguities
         unsupported.extend(component_unsupported)
-        ambiguities.extend(component_ambiguities)
-        component_cap = (
-            100
-            - 20 * min(len(component_unsupported), 2)
-            - 10 * min(len(component_ambiguities), 2)
-        )
+        ambiguities.extend(component.material_ambiguities)
+        component_cap = 100 - 20 * min(len(component_unsupported), 2)
         component.confidence = min(component.confidence, max(0, component_cap))
 
-    if unsupported or ambiguities:
-        consistency_cap = (
-            100
-            - 20 * min(len(unsupported), 2)
-            - 10 * min(len(ambiguities), 2)
-        )
+    if unsupported:
+        consistency_cap = 100 - 20 * min(len(unsupported), 2)
         evaluation.evidence_consistency = min(
             evaluation.evidence_consistency,
             max(0, consistency_cap),
         )
+        evaluation.has_unresolved_issues = True
+    elif ambiguities:
         evaluation.has_unresolved_issues = True
 
     component_min = min(component.confidence for component in components)
@@ -137,7 +130,6 @@ def formulation_selection_key(entry: Dict[str, Any], history_index: int) -> tupl
     evaluation = entry["evaluation"]
     return (
         min(entry["min_confidence"], evaluation.evidence_consistency),
-        not evaluation.has_unresolved_issues,
         evaluation.evidence_consistency,
         entry["overall_confidence"],
         history_index,
@@ -195,6 +187,9 @@ SOURCE-CONSISTENCY RULES:
   and quote the source wording that supports each interpretation. It must also explain
   how they could change the optimization result. Silence alone does not support an
   alternative interpretation.
+- Material ambiguities are diagnostic metadata, not formulation errors. Do not lower any
+  component confidence, `evidence_consistency`, or `overall_confidence` solely because an
+  ambiguity exists when the formulation uses an ordinary closed-world interpretation.
 - Mathematical encodings that preserve the same optimization problem belong in
   `representational_choices`; they are not unsupported assumptions and must not reduce
   confidence. Do not require the question to prescribe variable names, algebraic
@@ -211,9 +206,10 @@ SOURCE-CONSISTENCY RULES:
   interpretation.
 - Report each underlying issue once. Do not repeat the same assumption or ambiguity in
   multiple components or rephrase one issue as several separate entries.
-- Set `evidence_consistency` to reflect source support across the whole formulation
-  and set `has_unresolved_issues=true` if any unsupported assumption or material ambiguity
-  remains. Explain the concrete issue in `overall_assessment`.
+- Set `evidence_consistency` to reflect unsupported semantic additions only. Set
+  `has_unresolved_issues=true` if any unsupported assumption or material ambiguity remains,
+  while keeping ambiguity-only cases unpenalized. Explain concrete issues in
+  `overall_assessment`.
 """
 
     # Use LiteLLM for all models via instructor
@@ -292,18 +288,6 @@ def refine_formulation(
                         + "; ".join(component.unsupported_semantic_assumptions)
                         + "\n"
                     )
-                if component.material_ambiguities:
-                    history_section += (
-                        f"- Material ambiguities ({component_name}): "
-                        + "; ".join(component.material_ambiguities)
-                        + "\n"
-                    )
-                if component.representational_choices:
-                    history_section += (
-                        f"- Answer-preserving representations ({component_name}): "
-                        + "; ".join(component.representational_choices)
-                        + "\n"
-                    )
 
     # Create refinement prompt
     refinement_prompt = f"""You are refining an optimization formulation. Review all previous attempts and the feedback to create a better formulation.
@@ -319,8 +303,6 @@ Please create a REFINED formulation that addresses all the identified issues fro
 4. All necessary constraints are included and correctly formulated
 5. Every material modeling choice is supported by the original problem. Do not add,
    strengthen, or reinterpret requirements using unstated conventions.
-6. If the wording is ambiguous, preserve that uncertainty in the relevant source note
-   instead of silently choosing a stronger interpretation.
 
 Provide the complete refined formulation."""
 
