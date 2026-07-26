@@ -22,6 +22,10 @@ from .formulation import (
     create_instructor_client,
     extract_formulation,
 )
+from .source_audit import (
+    format_verified_source_issue,
+    scan_and_verify_source_issue,
+)
 
 
 def format_formulation_for_evaluation(formulation: OptimizationFormulation) -> str:
@@ -46,9 +50,6 @@ def format_formulation_for_evaluation(formulation: OptimizationFormulation) -> s
             if param.units:
                 param_str += f" [{param.units}]"
             parts.append(param_str)
-            parts.append(f'  Evidence: "{param.source.quote}"')
-            if param.source.note:
-                parts.append(f"  Evidence note: {param.source.note}")
 
     # Variables section
     if formulation.variables:
@@ -57,9 +58,6 @@ def format_formulation_for_evaluation(formulation: OptimizationFormulation) -> s
             var_str = f"- {var.name} ({var.data_type}): {var.description}"
             var_str += f" | Domain: {var.domain}"
             parts.append(var_str)
-            parts.append(f'  Evidence: "{var.source.quote}"')
-            if var.source.note:
-                parts.append(f"  Evidence note: {var.source.note}")
 
     # Objective section
     parts.append("\n## OBJECTIVE:")
@@ -67,9 +65,6 @@ def format_formulation_for_evaluation(formulation: OptimizationFormulation) -> s
     parts.append(f"- Description: {formulation.objective.description}")
     parts.append(f"- Expression: {formulation.objective.expression}")
     parts.append(f"- Variables involved: {', '.join(formulation.objective.variables_involved)}")
-    parts.append(f'- Evidence: "{formulation.objective.source.quote}"')
-    if formulation.objective.source.note:
-        parts.append(f"- Evidence note: {formulation.objective.source.note}")
 
     # Constraints section
     if formulation.constraints:
@@ -78,69 +73,16 @@ def format_formulation_for_evaluation(formulation: OptimizationFormulation) -> s
             parts.append(f"\n{i}. {constraint.name} ({constraint.sense}):")
             parts.append(f"   Expression: {constraint.expression}")
             parts.append(f"   Variables: {', '.join(constraint.variables_involved)}")
-            parts.append(f'   Evidence: "{constraint.source.quote}"')
-            if constraint.source.note:
-                parts.append(f"   Evidence note: {constraint.source.note}")
 
     return "\n".join(parts)
-
-
-def apply_evidence_consistency_penalties(
-    evaluation: FormulationEvaluation,
-) -> FormulationEvaluation:
-    """Apply deterministic score caps for unsupported or ambiguous modeling choices."""
-    components = (
-        evaluation.parameters,
-        evaluation.decision_variables,
-        evaluation.objective,
-        evaluation.constraints,
-    )
-    unsupported = []
-    ambiguities = []
-    for component in components:
-        component_unsupported = component.unsupported_semantic_assumptions
-        unsupported.extend(component_unsupported)
-        ambiguities.extend(component.material_ambiguities)
-        component_cap = 100 - 20 * min(len(component_unsupported), 2)
-        component.confidence = min(component.confidence, max(0, component_cap))
-
-    if unsupported:
-        consistency_cap = 100 - 20 * min(len(unsupported), 2)
-        evaluation.evidence_consistency = min(
-            evaluation.evidence_consistency,
-            max(0, consistency_cap),
-        )
-        evaluation.has_unresolved_issues = True
-    elif ambiguities:
-        evaluation.has_unresolved_issues = True
-
-    component_min = min(component.confidence for component in components)
-    evaluation.overall_confidence = min(
-        evaluation.overall_confidence,
-        component_min,
-        evaluation.evidence_consistency,
-    )
-    if evaluation.overall_confidence < 80:
-        evaluation.has_unresolved_issues = True
-    return evaluation
-
-
-def formulation_selection_key(entry: Dict[str, Any], history_index: int) -> tuple:
-    """Rank candidates by grounded quality, preferring the earlier candidate on ties."""
-    evaluation = entry["evaluation"]
-    return (
-        min(entry["min_confidence"], evaluation.evidence_consistency),
-        evaluation.evidence_consistency,
-        entry["overall_confidence"],
-        -history_index,
-    )
 
 
 def evaluate_formulation_confidence(
     raw_question: str,
     formulation: OptimizationFormulation,
     client=None,
-    model: str = "gpt-4o"
+    model: str = "gpt-4o",
+    verbose: bool = False,
 ) -> FormulationEvaluation:
     """
     Evaluate confidence scores for each component of the formulation.
@@ -157,14 +99,34 @@ def evaluate_formulation_confidence(
     # Format formulation for evaluation
     formulation_str = format_formulation_for_evaluation(formulation)
 
+    audit_context = ""
+    try:
+        audit, verification = scan_and_verify_source_issue(
+            raw_question=raw_question,
+            formulation=formulation,
+            client=client,
+            model=model,
+        )
+        audit_context = format_verified_source_issue(audit)
+        if verbose:
+            print("Source audit:")
+            print(json.dumps(audit.model_dump(), ensure_ascii=False, indent=2))
+            if verification is not None:
+                print("Source audit verification:")
+                print(json.dumps(verification.model_dump(), ensure_ascii=False, indent=2))
+    except Exception as error:
+        if verbose:
+            print(f"Source audit unavailable; using main-branch evaluation: {error}")
+
     # Create evaluation prompt
-    evaluation_prompt = f"""You are an expert in optimization and mathematical modeling. Your task is to evaluate the quality, correctness, and consistency with the source question of an optimization problem formulation.
+    evaluation_prompt = f"""You are an expert in optimization and mathematical modeling. Your task is to evaluate the quality and correctness of an optimization problem formulation.
 
 Given:
 1. **Raw Question**: {raw_question}
 
 2. **Proposed Formulation**:
 {formulation_str}
+{audit_context}
 
 Please evaluate the confidence (0-100) for each of the following components:
 
@@ -173,49 +135,7 @@ Please evaluate the confidence (0-100) for each of the following components:
 3. **OBJECTIVE**: Is the objective function correct and does it properly represent what should be optimized?
 4. **CONSTRAINTS**: Are all necessary constraints included and correctly formulated?
 
-For each component, provide a confidence score from 0-100 and a brief explanation.
-
-SOURCE-CONSISTENCY RULES:
-- Treat the raw question as authoritative, including the ordinary mathematical meaning
-  of its terminology, tables, units, and requested task. Do not demand that every
-  standard implication be restated as a separate sentence.
-- Check that each displayed Evidence quote actually supports the full modeling choice,
-  rather than merely mentioning the same entity.
-- Classify a choice as an `unsupported_semantic_assumption` only when it adds,
-  strengthens, or reinterprets source meaning AND changing that choice could change the
-  feasible set, objective values, objective ranking, or requested numerical answer.
-- Do not classify an interpretation as unsupported merely because an implied unit,
-  dependency, domain, or task convention is not spelled out. Flag it only when it
-  conflicts with the ordinary reading or materially narrows that reading without
-  textual support.
-- A `material_ambiguity` must identify at least two textually defensible interpretations
-  and quote the source wording that supports each interpretation. It must also explain
-  how they could change the optimization result. Silence alone does not support an
-  alternative interpretation.
-- Material ambiguities are diagnostic metadata, not formulation errors. Do not lower any
-  component confidence, `evidence_consistency`, or `overall_confidence` solely because an
-  ambiguity exists when the formulation uses an ordinary closed-world interpretation.
-- Mathematical encodings that preserve the same optimization problem belong in
-  `representational_choices`; they are not unsupported assumptions and must not reduce
-  confidence. Do not require the question to prescribe variable names, algebraic
-  encodings, linearizations, solver formulations, or implementation mechanisms.
-- Use closed-world benchmark semantics: the supplied description defines the modeled
-  world. Do not hypothesize hidden mechanisms, entities, ingredients, losses, demand,
-  inventory, interactions, constraints, or costs merely because they could exist in a
-  real application. Their absence from the question means they are outside the model,
-  not unresolved.
-- Treat the entities, alternatives, and numerical tables supplied by the question as the
-  problem instance, unless the text indicates that they are illustrative or incomplete.
-- Read quantities, rates, compositions, revenues, costs, and totals according to their
-  ordinary mathematical and dimensional meaning when the text provides no competing
-  interpretation.
-- Report each underlying issue once. Do not repeat the same assumption or ambiguity in
-  multiple components or rephrase one issue as several separate entries.
-- Set `evidence_consistency` to reflect unsupported semantic additions only. Set
-  `has_unresolved_issues=true` if any unsupported assumption or material ambiguity remains,
-  while keeping ambiguity-only cases unpenalized. Explain concrete issues in
-  `overall_assessment`.
-"""
+For each component, provide a confidence score from 0-100 and a brief explanation (1-3 sentences)."""
 
     # Use LiteLLM for all models via instructor
     if client is None:
@@ -237,7 +157,7 @@ SOURCE-CONSISTENCY RULES:
         **kwargs
     )
 
-    return apply_evidence_consistency_penalties(evaluation)
+    return evaluation
 
 
 def refine_formulation(
@@ -279,20 +199,6 @@ def refine_formulation(
             history_section += f"- Decision Variables: {past_evaluation.decision_variables.confidence}/100 - {past_evaluation.decision_variables.explanation}\n"
             history_section += f"- Objective: {past_evaluation.objective.confidence}/100 - {past_evaluation.objective.explanation}\n"
             history_section += f"- Constraints: {past_evaluation.constraints.confidence}/100 - {past_evaluation.constraints.explanation}\n"
-            history_section += f"- Evidence consistency: {past_evaluation.evidence_consistency}/100\n"
-            history_section += f"- Has unresolved issues: {past_evaluation.has_unresolved_issues}\n"
-            for component_name, component in (
-                ("Parameters", past_evaluation.parameters),
-                ("Decision Variables", past_evaluation.decision_variables),
-                ("Objective", past_evaluation.objective),
-                ("Constraints", past_evaluation.constraints),
-            ):
-                if component.unsupported_semantic_assumptions:
-                    history_section += (
-                        f"- Unsupported semantic assumptions ({component_name}): "
-                        + "; ".join(component.unsupported_semantic_assumptions)
-                        + "\n"
-                    )
 
     # Create refinement prompt
     refinement_prompt = f"""You are refining an optimization formulation. Review all previous attempts and the feedback to create a better formulation.
@@ -306,9 +212,6 @@ Please create a REFINED formulation that addresses all the identified issues fro
 2. All decision variables are properly defined with correct domains
 3. The objective function correctly represents what needs to be optimized
 4. All necessary constraints are included and correctly formulated
-5. Preserve source-supported choices from earlier attempts. Change semantics only to fix
-   a concrete unsupported addition or conflict identified in the feedback; missing
-   restatement of an ordinary task implication is not by itself a reason to rewrite.
 
 Provide the complete refined formulation."""
 
@@ -406,7 +309,8 @@ def extract_formulation_with_refinement(
             raw_question=problem_text,
             formulation=formulation,
             client=formulation_client,
-            model=evaluation_model
+            model=evaluation_model,
+            verbose=verbose,
         )
 
         overall_confidence = evaluation.overall_confidence
@@ -422,8 +326,7 @@ def extract_formulation_with_refinement(
             params_confidence,
             vars_confidence,
             obj_confidence,
-            constraints_confidence,
-            evaluation.evidence_consistency,
+            constraints_confidence
         )
 
         # Store this formulation in history
@@ -440,8 +343,6 @@ def extract_formulation_with_refinement(
             print("Confidence Scores:")
             print(f"  Overall: {overall_confidence}/100")
             print(f"  Min (weakest component): {min_confidence}/100")
-            print(f"  Evidence consistency: {evaluation.evidence_consistency}/100")
-            print(f"  Has unresolved issues: {evaluation.has_unresolved_issues}")
             print(f"  - Parameters: {params_confidence}/100")
             print(f"    {evaluation.parameters.explanation}")
             print(f"  - Decision Variables: {vars_confidence}/100")
@@ -479,23 +380,26 @@ def extract_formulation_with_refinement(
             break
 
     # Select the best formulation from history based on:
-    # 1. Highest source-consistent weakest-component confidence
-    # 2. Prefer candidates without unresolved issues
-    # 3. Highest evidence consistency and overall confidence
-    # 4. Earliest iteration when otherwise tied, to avoid unnecessary semantic drift
+    # 1. Highest min confidence (weakest component)
+    # 2. Highest overall confidence (when min confidence is tied)
+    # 3. Latest iteration (when both are tied)
     if not formulation_history:
         raise ValueError("No formulations were evaluated")
 
     best_idx = max(
         range(len(formulation_history)),
-        key=lambda i: formulation_selection_key(formulation_history[i], i)
+        key=lambda i: (
+            formulation_history[i]['min_confidence'],
+            formulation_history[i]['overall_confidence'],
+            i
+        )
     )
     best_entry = formulation_history[best_idx]
 
     if verbose:
         print(f"\n{'=' * 80}")
         print("SELECTING BEST FORMULATION FROM HISTORY")
-        print("Criteria: Source-consistent min score, consistency, overall, then earliest iteration")
+        print("Criteria: Highest min score, then highest overall score, then latest iteration")
         print('=' * 80)
         print(f"\nEvaluated {len(formulation_history)} formulation(s) across {best_entry['iteration']} iteration(s)")
         print("\nConfidence scores by iteration:")
@@ -503,12 +407,7 @@ def extract_formulation_with_refinement(
             marker = " ← SELECTED" if entry == best_entry else ""
             print(f"  Iteration {entry['iteration']}: "
                   f"Min={entry['min_confidence']}/100, "
-                  f"EvidenceConsistency={entry['evaluation'].evidence_consistency}/100, "
-                  f"Unresolved={entry['evaluation'].has_unresolved_issues}, "
                   f"Overall={entry['overall_confidence']}/100{marker}")
-        if best_entry["evaluation"].has_unresolved_issues:
-            print("\nNOTICE: The selected candidate contains unresolved issues. "
-                  "The automated pipeline will continue and retain this status for analysis.")
         print(f"\nReturning formulation from iteration {best_entry['iteration']} "
               f"with min confidence {best_entry['min_confidence']}/100 "
               f"(overall: {best_entry['overall_confidence']}/100)")

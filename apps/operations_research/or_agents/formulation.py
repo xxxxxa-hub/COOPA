@@ -141,27 +141,6 @@ class ComponentConfidence(BaseModel):
 
     confidence: int = Field(..., ge=0, le=100, description="Confidence score from 0-100")
     explanation: str = Field(..., description="Brief explanation of the score")
-    unsupported_semantic_assumptions: List[str] = Field(
-        default_factory=list,
-        description=(
-            "Unsupported claims that can change the feasible set, objective values, "
-            "objective ranking, or requested answer"
-        ),
-    )
-    material_ambiguities: List[str] = Field(
-        default_factory=list,
-        description=(
-            "Alternative source interpretations that can change the feasible set, "
-            "objective values, objective ranking, or requested answer"
-        ),
-    )
-    representational_choices: List[str] = Field(
-        default_factory=list,
-        description=(
-            "Answer-preserving mathematical encodings or implementation choices; "
-            "these are informational and are not evidence-consistency errors"
-        ),
-    )
 
 
 class FormulationEvaluation(BaseModel):
@@ -173,16 +152,6 @@ class FormulationEvaluation(BaseModel):
     constraints: ComponentConfidence = Field(..., description="Evaluation of constraints")
     overall_confidence: int = Field(..., ge=0, le=100, description="Average confidence score")
     overall_assessment: str = Field(..., description="Brief overall assessment")
-    evidence_consistency: int = Field(
-        100,
-        ge=0,
-        le=100,
-        description="Confidence that the formulation follows only information in the question",
-    )
-    has_unresolved_issues: bool = Field(
-        False,
-        description="Whether unsupported semantic assumptions or material ambiguities remain",
-    )
 
     # @model_validator(mode="after")
     # @classmethod

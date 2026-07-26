@@ -1,204 +1,80 @@
+from apps.operations_research.or_agents.iterative_formulation import (
+    format_formulation_for_evaluation,
+)
 from apps.operations_research.or_agents.formulation import (
-    ComponentConfidence,
     ConstraintDefinition,
-    FormulationEvaluation,
     ObjectiveDefinition,
     OptimizationFormulation,
     SourceReference,
     VariableDefinition,
 )
-from apps.operations_research.or_agents.iterative_formulation import (
-    apply_evidence_consistency_penalties,
-    format_formulation_for_evaluation,
-    formulation_selection_key,
+from apps.operations_research.or_agents.source_audit import (
+    SourceAuditIssue,
+    SourceAuditResult,
+    format_verified_source_issue,
 )
 
 
-def _component(score=95, unsupported=None, ambiguities=None, representations=None):
-    return ComponentConfidence(
-        confidence=score,
-        explanation="test",
-        unsupported_semantic_assumptions=unsupported or [],
-        material_ambiguities=ambiguities or [],
-        representational_choices=representations or [],
-    )
-
-
-def _evaluation(score=95, unsupported=None, ambiguities=None):
-    return FormulationEvaluation(
-        parameters=_component(score),
-        decision_variables=_component(score, unsupported, ambiguities),
-        objective=_component(score),
-        constraints=_component(score),
-        overall_confidence=score,
-        overall_assessment="test",
-        evidence_consistency=score,
-    )
-
-
-def test_formatter_keeps_evidence_visible_to_evaluator():
-    formulation = OptimizationFormulation(
-        question="Produce at most two units.",
+def _formulation() -> OptimizationFormulation:
+    source = SourceReference(quote="Production cannot exceed 10 units.")
+    return OptimizationFormulation(
+        question="Production cannot exceed 10 units. Maximize production.",
         parameters=[],
         variables=[
             VariableDefinition(
                 name="x",
-                data_type="continuous",
-                description="production",
+                data_type="integer",
+                description="units produced",
                 domain="x >= 0",
-                source=SourceReference(quote="Produce at most two units."),
+                source=source,
             )
         ],
         objective=ObjectiveDefinition(
             sense="maximize",
-            description="production",
+            description="maximize production",
             expression="x",
             variables_involved=["x"],
-            source=SourceReference(quote="Produce"),
+            source=SourceReference(quote="Maximize production."),
         ),
         constraints=[
             ConstraintDefinition(
                 name="capacity",
                 sense="<=",
-                expression="x <= 2",
+                expression="x <= 10",
                 variables_involved=["x"],
-                source=SourceReference(quote="at most two units"),
+                source=source,
             )
         ],
     )
 
-    rendered = format_formulation_for_evaluation(formulation)
 
-    assert 'Evidence: "Produce at most two units."' in rendered
-    assert 'Evidence: "at most two units"' in rendered
+def test_main_branch_formatter_does_not_dump_all_source_quotes():
+    formatted = format_formulation_for_evaluation(_formulation())
+
+    assert "x <= 10" in formatted
+    assert "Evidence:" not in formatted
+    assert "Production cannot exceed 10 units." not in formatted
 
 
-def test_unsupported_assumption_is_deterministically_capped_and_flagged():
-    evaluation = _evaluation(
-        score=98,
-        unsupported=["Integer domain is not stated in the question."],
+def test_empty_audit_adds_no_confidence_context():
+    assert format_verified_source_issue(SourceAuditResult()) == ""
+
+
+def test_verified_audit_context_contains_only_one_focused_issue():
+    audit = SourceAuditResult(
+        flagged_issue=SourceAuditIssue(
+            issue_type="unsupported_strengthening",
+            affected_dimension="constraints",
+            element_name="capacity",
+            formulation_claim="x = 10",
+            source_quote="Production cannot exceed 10 units.",
+            why_material="Equality removes feasible production levels below 10.",
+        )
     )
 
-    result = apply_evidence_consistency_penalties(evaluation)
+    context = format_verified_source_issue(audit)
 
-    assert result.decision_variables.confidence == 80
-    assert result.evidence_consistency == 80
-    assert result.overall_confidence == 80
-    assert result.has_unresolved_issues is True
-
-
-def test_selection_prefers_grounded_candidate_over_higher_raw_scores():
-    unsupported = _evaluation(
-        score=99,
-        unsupported=["Changed 'at most two' to exactly two."],
-    )
-    apply_evidence_consistency_penalties(unsupported)
-    grounded = _evaluation(score=85)
-    entries = [
-        {
-            "evaluation": unsupported,
-            "min_confidence": 70,
-            "overall_confidence": unsupported.overall_confidence,
-        },
-        {
-            "evaluation": grounded,
-            "min_confidence": 85,
-            "overall_confidence": grounded.overall_confidence,
-        },
-    ]
-
-    best = max(range(len(entries)), key=lambda i: formulation_selection_key(entries[i], i))
-
-    assert best == 1
-
-
-def test_selection_prefers_earlier_candidate_on_exact_tie():
-    evaluation = _evaluation(score=95)
-    entries = [
-        {
-            "evaluation": evaluation,
-            "min_confidence": 95,
-            "overall_confidence": 95,
-        },
-        {
-            "evaluation": evaluation,
-            "min_confidence": 95,
-            "overall_confidence": 95,
-        },
-    ]
-
-    best = max(range(len(entries)), key=lambda i: formulation_selection_key(entries[i], i))
-
-    assert best == 0
-
-
-def test_material_ambiguity_is_flagged_without_calling_it_unsupported():
-    evaluation = _evaluation(
-        score=95,
-        ambiguities=["The surcharge timing is not specified."],
-    )
-
-    result = apply_evidence_consistency_penalties(evaluation)
-
-    assert result.decision_variables.confidence == 95
-    assert result.evidence_consistency == 95
-    assert result.overall_confidence == 95
-    assert result.has_unresolved_issues is True
-
-
-def test_low_confidence_candidate_is_never_returned_as_unflagged():
-    evaluation = _evaluation(score=72)
-
-    result = apply_evidence_consistency_penalties(evaluation)
-
-    assert result.overall_confidence == 72
-    assert result.has_unresolved_issues is True
-
-
-def test_answer_preserving_representation_is_not_penalized():
-    evaluation = FormulationEvaluation(
-        parameters=_component(),
-        decision_variables=_component(
-            representations=["Uses binary assignment variables instead of named choices."]
-        ),
-        objective=_component(),
-        constraints=_component(
-            representations=["Uses an equivalent linear implication encoding."]
-        ),
-        overall_confidence=95,
-        overall_assessment="test",
-        evidence_consistency=95,
-    )
-
-    result = apply_evidence_consistency_penalties(evaluation)
-
-    assert result.evidence_consistency == 95
-    assert result.overall_confidence == 95
-    assert result.has_unresolved_issues is False
-
-
-def test_penalties_scale_instead_of_saturating_every_candidate():
-    one_issue = _evaluation(score=98, unsupported=["Changes the feasible set."])
-    two_issues = _evaluation(
-        score=98,
-        unsupported=["Changes the feasible set.", "Changes the objective ranking."],
-    )
-
-    apply_evidence_consistency_penalties(one_issue)
-    apply_evidence_consistency_penalties(two_issues)
-
-    assert one_issue.evidence_consistency == 80
-    assert two_issues.evidence_consistency == 60
-
-
-def test_many_semantic_issues_do_not_collapse_consistency_to_zero():
-    evaluation = _evaluation(
-        score=98,
-        unsupported=[f"semantic issue {i}" for i in range(5)],
-        ambiguities=[f"material ambiguity {i}" for i in range(5)],
-    )
-
-    result = apply_evidence_consistency_penalties(evaluation)
-
-    assert result.evidence_consistency == 60
-    assert result.overall_confidence == 60
+    assert "unsupported_strengthening" in context
+    assert "x = 10" in context
+    assert "Production cannot exceed 10 units." in context
+    assert "Equality removes feasible production levels below 10." in context
